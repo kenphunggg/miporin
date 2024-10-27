@@ -18,12 +18,14 @@ func init() {
 }
 
 func License(required bool) {
+	// If required is false, it exits immediately without doing anything.
 	if !required {
 		return
 	}
 	for {
 		targetDate, _ := time.Parse("02-01-2006", "15-11-2024")
 		now := time.Now()
+		// After target date, the image will expired and must contact the author
 		if !now.Before(targetDate) {
 			bonalib.Warn("This image is expired, contact to daodaihiep22ussr@gmail.com for extending license")
 			panic("This image is expired, contact to daodaihiep22ussr@gmail.com for extending license")

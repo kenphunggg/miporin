@@ -54,21 +54,31 @@ func (o *OkasanScraper) init() {
 		Version:  "v1",
 		Resource: "services",
 	}
+	// List all ksvc in default namespace and hold the value in [ksvcList]
 	ksvcList, err := DYNCLIENT.Resource(ksvcGVR).Namespace("default").List(context.TODO(), v1.ListOptions{})
+	// If there is error
 	if err != nil {
 		bonalib.Warn("Error listing Knative services", err)
 	}
+	// Looping for all ksvc
 	for _, ksvc := range ksvcList.Items {
+		// Get ksvc name
 		ksvcName := ksvc.GetName()
+		// For each ksvc, create a new [KodomoScraper]
+		// The value equal to [OkasanScraper]
 		child := NewKodomoScraper(ksvcName, o.Window, o.sleepTime)
+		// ???
 		o.addKodomo(child)
 	}
 }
 
+// Scrape important informations
 func (o *OkasanScraper) scrape() {
+	// Scrape latency
 	go o.scrapeLatency()
 }
 
+// Scrape latency
 func (o *OkasanScraper) scrapeLatency() [][]int32 {
 	for {
 		latencyRaw := Query("avg_over_time(latency_between_nodes[" + o.Window + "s])")

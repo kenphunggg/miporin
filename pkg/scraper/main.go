@@ -17,6 +17,9 @@ var (
 
 func Scraper(OKASAN_SCRAPERS map[string]*OkasanScraper) {
 	// create new okasan
+	// Import "okaasan" to [name]
+	// Import "10"      to [window]
+	// Import "2"       to [sleepTime]
 	okasan := NewOkasanScraper("okaasan", "10", int8(2))
 
 	// add okasan to OKASAN_SCRAPERS

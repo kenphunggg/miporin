@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/bonavadeur/miporin/pkg/bonalib"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func License() {
@@ -29,9 +29,14 @@ func License() {
 	}
 }
 
+// Query data from [Prometheus]
 func Query(query string) map[string]interface{} {
+	// This ensures that the query string is formatted correctly
+	// Input:  "hello world & friends"
+	// Output: "hello%20world%20%26%20friends"
 	query = url.QueryEscape(query)
 
+	// Make an HTTP GET request to Prometheus server
 	resp, err := http.Get(PROMSERVER + query)
 	if err != nil {
 		bonalib.Warn("err", err)
@@ -173,8 +178,8 @@ func deleteServiceMonitor(ksvcName string) {
 		Resource(smonGVR).
 		Namespace(namespace).
 		Delete(context.TODO(), ksvcName, metav1.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	})
+			PropagationPolicy: &deletePolicy,
+		})
 	if err != nil {
 		bonalib.Warn("Failed to delete ServiceMonitor instance")
 	} else {

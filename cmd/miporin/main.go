@@ -19,8 +19,8 @@ var (
 )
 
 func init() {
-	scraper.OKASAN_SCRAPERS  = OKASAN_SCRAPERS
-	yukari.OKASAN_SCRAPERS   = OKASAN_SCRAPERS
+	scraper.OKASAN_SCRAPERS = OKASAN_SCRAPERS
+	yukari.OKASAN_SCRAPERS = OKASAN_SCRAPERS
 	yukari.OKASAN_SCHEDULERS = OKASAN_SCHEDULERS
 }
 
@@ -42,7 +42,8 @@ func main() {
 	// start echo server
 	go server()
 
-	// hangout forever
+	// Blocks the main goroutine indefinitely by waiting on the Done() channel from the ctx context
+	// Since the background context never completes, this effectively makes the program run indefinitely unless externally interrupted
 	<-ctx.Done()
 }
 
