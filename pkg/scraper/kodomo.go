@@ -87,7 +87,11 @@ func (k *KodomoScraper) scrape() {
 			return
 		// By default
 		default:
+			// Return serving time matrix
+			// Extract value to [KodomoScraper.Matrix.Servt]
 			k.scrapeServingTime()
+			// Get total number of pods with default namespace on all nodes
+			// Extract value to [KodomoScraper.PodOnNode]
 			k.scrapePodOnNode()
 			k.Metrics.Respt = libs.AddMatrix(k.Metrics.Servt, k.Okasan.Latency)
 
@@ -132,6 +136,7 @@ func (k *KodomoScraper) scrape() {
 	}
 }
 
+// Current problem: Only get serving time that served on node i but not mention the source of the traffic
 func (k *KodomoScraper) scrapeServingTime() {
 	// Query Serving time over 10 seconds
 	// Query test in [Prometheus]
@@ -174,6 +179,7 @@ func (k *KodomoScraper) scrapeServingTime() {
 }
 
 func (k *KodomoScraper) scrapePodOnNode() {
+	// kubectl get pods -n default
 	pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		bonalib.Warn("KodomoScraper.scrapePodOnNode: err when list all pods", err)
@@ -185,6 +191,7 @@ func (k *KodomoScraper) scrapePodOnNode() {
 		podOnNode[node] = 0
 	}
 
+	// Count all pods with status "Running"
 	for _, pod := range pods.Items {
 		if pod.Status.Phase != "Terminating" && pod.Status.Phase != "Pending" && strings.Contains(pod.Name, "hello") {
 			podOnNode[pod.Spec.NodeName]++
