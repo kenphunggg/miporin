@@ -22,8 +22,11 @@ type KodomoScraper struct {
 	ScrapeStop *StopChan
 }
 
+// Create new type [Metrics] that contain Servingtime and Responsetime
 type Metrics struct {
+	// Serving time for traffic from node i to node j
 	Servt [][]int32
+	// Serving time for traffic from node i to node j
 	Respt [][]int32
 }
 
@@ -35,7 +38,7 @@ func NewKodomoScraper(
 	name string,
 	window string,
 	sleepTime int8,
-	) *KodomoScraper {
+) *KodomoScraper {
 	atarashiiKodomoScraper := &KodomoScraper{
 		Name:       name,
 		Metrics:    NewMetrics(),
@@ -79,8 +82,10 @@ func (s *StopChan) Stop() {
 func (k *KodomoScraper) scrape() {
 	for {
 		select {
+		// If it receive a signal from [KodomoScraper], return nothing
 		case <-k.ScrapeStop.Kodomo:
 			return
+		// By default
 		default:
 			k.scrapeServingTime()
 			k.scrapePodOnNode()
@@ -128,22 +133,33 @@ func (k *KodomoScraper) scrape() {
 }
 
 func (k *KodomoScraper) scrapeServingTime() {
+	// Query Serving time over 10 seconds
+	// Query test in [Prometheus]
+	// rate(revision_request_latencies_sum{service_name="hello"}[10s])/rate(revision_request_latencies_count{service_name="hello"}[10s])
+	// Value output: 1.730103324765e+09 50
+	// It means Sunday, October 28, 2024, 14:35:24 UTC, 50 (servingtime)
 	servingTimeRaw := Query("rate(revision_request_latencies_sum{service_name=\"" + k.Name + "\"}[" + k.window + "s])/rate(revision_request_latencies_count{service_name=\"" + k.Name + "\"}[" + k.window + "s])")
 	servingTimeResult := servingTimeRaw["data"].(map[string]interface{})["result"].([]interface{})
-
 	servingTimeLine := make([][]int32, len(NODENAMES))
 
 	for _, stResult := range servingTimeResult {
+		// Extract ipaddress from [servingTimeResult]
+		// Ip address is the pod ip
 		ip := strings.Split(stResult.(map[string]interface{})["metric"].(map[string]interface{})["instance"].(string), ":")[0]
+		// Get serving time for that pod/node
 		_servingTime := libs.String2RoundedInt(stResult.(map[string]interface{})["value"].([]interface{})[1].(string))
+		// Find the location(node) where the the pod located in
 		_inNode := miporin.CheckIPInNode(ip)
+		// It means that traffic is served at node [_inNode]
 		for i, node := range NODENAMES {
 			if _inNode == node {
+				// Append row i in ServingTimeLine
 				servingTimeLine[i] = append(servingTimeLine[i], _servingTime)
 			}
 		}
 	}
 
+	// Each line of [servingTimeRow] equal to average of a line in [servingTimeLine]
 	servingTimeRow := make([]int32, len(NODENAMES))
 	for i, stl := range servingTimeLine {
 		servingTimeRow[i] = libs.Average(stl)

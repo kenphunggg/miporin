@@ -29,7 +29,7 @@ func License() {
 	}
 }
 
-// Query data from [Prometheus]
+// Query data from [Prometheus] and return result in [map]
 func Query(query string) map[string]interface{} {
 	// This ensures that the query string is formatted correctly
 	// Input:  "hello world & friends"
@@ -38,18 +38,24 @@ func Query(query string) map[string]interface{} {
 
 	// Make an HTTP GET request to Prometheus server
 	resp, err := http.Get(PROMSERVER + query)
+	// Log Error
 	if err != nil {
 		bonalib.Warn("err", err)
 	}
 
+	// Ensure that the response body closed once it is no longer needed
 	defer resp.Body.Close()
 
+	// [io.ReadAll] reads data from resp.Body
 	body, err := io.ReadAll(resp.Body)
+	// Log Error
 	if err != nil {
 		bonalib.Warn("err", err)
 	}
 
+	// Creare a [map] named "result"
 	var result map[string]interface{}
+	// [json.Unmarshal] convert [body] in [json] to [&result]
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		bonalib.Warn("err", err)

@@ -18,7 +18,7 @@ var _ = bonalib.Baka()
 
 type OkasanScraper struct {
 	Name      string
-	Latency   [][]int32
+	Latency   [][]int32 // Latency metric
 	Window    string
 	sleepTime int8
 	Kodomo    map[string]*KodomoScraper
@@ -48,6 +48,7 @@ func NewOkasanScraper(
 	return atarashiiOkasanScraper
 }
 
+// Initialize [OkasanScraper], for each [ksvc], create a [KodomoScraper]
 func (o *OkasanScraper) init() {
 	ksvcGVR := schema.GroupVersionResource{
 		Group:    "serving.knative.dev",
@@ -81,10 +82,14 @@ func (o *OkasanScraper) scrape() {
 // Scrape latency
 func (o *OkasanScraper) scrapeLatency() [][]int32 {
 	for {
+		// Query latency scraped from [Monlat] in [Prometheus] through [ServiceMonitor]
 		latencyRaw := Query("avg_over_time(latency_between_nodes[" + o.Window + "s])")
 		latencyResult := latencyRaw["data"].(map[string]interface{})["result"].([]interface{})
 
+		// Initialize a 2-D slice
+		// Size of the matrix equal to number of nodes
 		latency := make([][]int32, len(NODENAMES))
+		// For each row of latency matrix
 		for i := range latency {
 			latency[i] = make([]int32, len(NODENAMES))
 		}
@@ -95,11 +100,15 @@ func (o *OkasanScraper) scrapeLatency() [][]int32 {
 		}
 
 		for _, lr := range latencyResult {
+			// Return metric map
+			// a.k.a latency between nodes
 			lrMetric := lr.(map[string]interface{})["metric"].(map[string]interface{})
 			lrValue := libs.String2RoundedInt(lr.(map[string]interface{})["value"].([]interface{})[1].(string))
+			// Return latency metric
 			latency[nodeIndex[lrMetric["from"].(string)]][nodeIndex[lrMetric["to"].(string)]] = lrValue
 		}
 
+		// Import value into [OkasanScraper]
 		o.Latency = latency
 
 		time.Sleep(time.Duration(o.sleepTime) * time.Second)
@@ -107,6 +116,8 @@ func (o *OkasanScraper) scrapeLatency() [][]int32 {
 }
 
 func (o *OkasanScraper) watchKsvcCreateEvent() {
+	// The below code equal to
+	// kubectl get ksvc -n default --watch
 	namespace := "default"
 
 	ksvcGVR := schema.GroupVersionResource{
@@ -122,16 +133,26 @@ func (o *OkasanScraper) watchKsvcCreateEvent() {
 		panic(err.Error())
 	}
 
+	// Event handling code
 	for event := range watcher.ResultChan() {
+		// Catch ksvc name for each event
 		ksvc, _ := event.Object.(*unstructured.Unstructured)
 		ksvcName, _, _ := unstructured.NestedString(ksvc.Object, "metadata", "name")
+
+		// If new ksvc is created
 		if event.Type == watch.Added {
+			// Create new [KodomoScraper]
 			child := NewKodomoScraper(ksvcName, o.Window, int8(2))
+			// Add created [KodomoSraper] to [OkasanScraper]
 			o.addKodomo(child)
+			// Create new [ServiceMonitor]
 			createServiceMonitor(ksvcName)
 		}
+		// If new ksvc is deleted
 		if event.Type == watch.Deleted {
+			// Delete Service Monitor
 			deleteServiceMonitor(ksvcName)
+			// Delete [KodomoScraper]
 			o.deleteKodomo(ksvcName)
 		}
 	}
