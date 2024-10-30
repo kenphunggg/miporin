@@ -18,9 +18,9 @@ import (
 )
 
 type OkasanScheduler struct {
-	Name      string
-	sleepTime int8
-	Kodomo    map[string]*KodomoScheduler
+	Name        string
+	sleepTime   int8
+	Kodomo      map[string]*KodomoScheduler
 	MaxPoN      map[string]int32
 	KPADecision map[string]map[string]int32
 }
@@ -39,7 +39,7 @@ func NewOkasanScheduler(
 	}
 	atarashiiOkasanScheduler.init()
 
-	go atarashiiOkasanScheduler.scrapeKPA()
+	go atarashiiOkasanScheduler.scrapeKPA() // Scrape "Knative Pod Autoscaler"
 
 	go atarashiiOkasanScheduler.watchKsvcCreateEvent()
 
@@ -47,6 +47,7 @@ func NewOkasanScheduler(
 }
 
 func (o *OkasanScheduler) init() {
+	// Get all knative service
 	ksvcGVR := schema.GroupVersionResource{
 		Group:    "serving.knative.dev",
 		Version:  "v1",
