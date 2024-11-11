@@ -4,6 +4,8 @@ import (
 	"time"
 )
 
+// Each [KodomoScheduler] keep track on each ksvc,
+// If a ksvc want to create new pod, it send info to [KodomoScheduler] to hold the data on [Decision] variable
 type KodomoScheduler struct {
 	Name         string
 	Decision     map[string]int32
@@ -28,6 +30,7 @@ func NewKodomoScheduler(
 		ScheduleStop: NewStopChan(),
 	}
 
+	// Initialize value for decision on node to 0
 	for _, nodename := range NODENAMES {
 		atarashiiKodomoScheduler.Decision[nodename] = int32(0)
 	}

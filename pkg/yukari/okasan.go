@@ -46,6 +46,7 @@ func NewOkasanScheduler(
 	return atarashiiOkasanScheduler
 }
 
+// Create new [KodomoScheduler] for each ksvc
 func (o *OkasanScheduler) init() {
 	// Get all knative service
 	ksvcGVR := schema.GroupVersionResource{
@@ -53,10 +54,12 @@ func (o *OkasanScheduler) init() {
 		Version:  "v1",
 		Resource: "services",
 	}
+	// List all ksvc in default namespace and hold the value in [ksvcList]
 	ksvcList, err := DYNCLIENT.Resource(ksvcGVR).Namespace("default").List(context.TODO(), v1.ListOptions{})
 	if err != nil {
 		bonalib.Warn("Error listing Knative services:", err)
 	}
+	// For each ksvc, create a new [Kodomo]
 	for _, ksvc := range ksvcList.Items {
 		ksvcName := ksvc.GetName()
 		child := NewKodomoScheduler(ksvcName, o.sleepTime)
@@ -64,7 +67,14 @@ func (o *OkasanScheduler) init() {
 	}
 }
 
+// ???
 func (o *OkasanScheduler) scrapeKPA() {
+	// Create a nested map
+	// Example:
+	// decideInNode["node1"] = map[string]int32{
+	// "ksvc1": 2,
+	// "ksvc2": 8,
+	// }
 	decideInNode := map[string]map[string]int32{}
 	for {
 		response, err := http.Get("http://autoscaler.knative-serving.svc.cluster.local:9999/metrics/kservices")
@@ -85,12 +95,15 @@ func (o *OkasanScheduler) scrapeKPA() {
 	}
 }
 
+// Get value from [KodomoScheduler] to execute [schedule]
 func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 	decideInNode := map[string]int32{}
 	currentDesiredPods := map[string]int32{}
 	newDesiredPods := map[string]int32{}
 	deltaDesiredPods := map[string]int32{}
 	noChanges := map[string]int32{} // noChanges is a const, equal [0, 0, 0]
+
+	// Initial value for all node in cluster
 	for _, nodename := range NODENAMES {
 		currentDesiredPods[nodename] = 0
 		newDesiredPods[nodename] = 0
@@ -100,6 +113,7 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 	firstTime := true
 	var minResponseTime, minIdx int32
 
+	// Convert nodename into number
 	nodeidx := map[string]int{}
 	for i, nodename := range NODENAMES {
 		nodeidx[nodename] = i
@@ -113,6 +127,7 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			decideInNode = kodomo.Decision
 
 			if firstTime {
+				// Why equal ???
 				currentDesiredPods = decideInNode
 				firstTime = false
 			} else {

@@ -68,7 +68,7 @@ func (o *OkasanScraper) init() {
 		// For each ksvc, create a new [KodomoScraper]
 		// The value equal to [OkasanScraper]
 		child := NewKodomoScraper(ksvcName, o.Window, o.sleepTime)
-		// ???
+		// Add new kodomo
 		o.addKodomo(child)
 	}
 }
