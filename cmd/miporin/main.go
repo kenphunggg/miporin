@@ -25,7 +25,7 @@ func init() {
 }
 
 func main() {
-	bonalib.Log("Konnichiwa, Miporin-chan desu")
+	bonalib.Log("Have a nice day, LAZYken")
 	ctx := context.Background()
 
 	// check license ahihi

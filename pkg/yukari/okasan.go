@@ -22,7 +22,7 @@ type OkasanScheduler struct {
 	sleepTime   int8
 	Kodomo      map[string]*KodomoScheduler
 	MaxPoN      map[string]int32
-	KPADecision map[string]map[string]int32
+	KPADecision map[string]map[string]int32 // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
 }
 
 func NewOkasanScheduler(
@@ -67,7 +67,7 @@ func (o *OkasanScheduler) init() {
 	}
 }
 
-// ???
+// This function make a http request to [Knative Autoscaler] to retrieve its information
 func (o *OkasanScheduler) scrapeKPA() {
 	// Create a nested map
 	// Example:
@@ -77,18 +77,27 @@ func (o *OkasanScheduler) scrapeKPA() {
 	// }
 	decideInNode := map[string]map[string]int32{}
 	for {
+		// This return number of pod needed on each node
+		// {"hello":{"cloud-node":1,"edge-node":3,"master-node":0}}
+		// This mean that
+		// 1 pod on cloud-node
+		// 3 pods on edge-node
+		// 0 pod on master-node
 		response, err := http.Get("http://autoscaler.knative-serving.svc.cluster.local:9999/metrics/kservices")
 		if err != nil {
 			bonalib.Warn("Error in calling to Kn-Au")
 			time.Sleep(5 * time.Second)
 			continue
 		}
+		// If there is no err: retrieve value from [autoscaler] and hold in [decideInNode]
 		if err := json.NewDecoder(response.Body).Decode(&decideInNode); err != nil {
+			// map[hello:map[cloud-node:0 edge-node:0 master-node:0]]
 			bonalib.Warn("Failed to decode JSON: ", err)
 			continue
 		}
 		response.Body.Close()
 
+		// [Okasan.KPADecision] will hold the value of [decideInNode]
 		o.KPADecision = decideInNode
 
 		time.Sleep(time.Duration(o.sleepTime) * time.Second)
@@ -124,15 +133,19 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 		case <-kodomo.ScheduleStop.Okasan:
 			return
 		default:
+			// [KodomoScheduler.Decision] equal [Okasan.KPADecision] which is scrapped from [Knative Autoscaler]
+			// It will return the number of pod required on each node
 			decideInNode = kodomo.Decision
 
+			// Initial number of pod on each node
 			if firstTime {
-				// Why equal ???
 				currentDesiredPods = decideInNode
 				firstTime = false
 			} else {
 				newDesiredPods = decideInNode
 			}
+
+			// Calculate the differences on number of pods on each node
 			for k_cdp := range currentDesiredPods {
 				deltaDesiredPods[k_cdp] = newDesiredPods[k_cdp] - currentDesiredPods[k_cdp]
 			}
@@ -149,14 +162,14 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			}
 
 			for k_ddp, v_ddp := range deltaDesiredPods {
-				for i := v_ddp; i != 0; {
-					if i < 0 {
-						currentDesiredPods[k_ddp]--
-						i++
+				for i := v_ddp; i != 0; { // Check for every node that have the change in number of pod
+					if i < 0 { // If number of pod on that node decrease
+						currentDesiredPods[k_ddp]-- // Decrease the [currentDesiredPods] by 1
+						i++                         // Check for next node
 					}
-					if i > 0 {
-						minResponseTime = int32(1000000)
-						minIdx = -1
+					if i > 0 { // If number of pod on that node increase
+						minResponseTime = int32(1000000) // Set min response time to extreme high
+						minIdx = -1                      // Set min index to -1
 						responseTime := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Metrics.Respt
 						for i_rpt := range responseTime[nodeidx[k_ddp]] { // loop each row of RESPONSETIME
 							if currentDesiredPods[k_ddp] >= int32(MAXPON[nodeidx[k_ddp]]) {
@@ -228,6 +241,7 @@ func (o *OkasanScheduler) patchSchedule(desiredPods map[string]int32) {
 }
 
 func (o *OkasanScheduler) watchKsvcCreateEvent() {
+	// kubectl get ksvc -n default --watch
 	namespace := "default"
 
 	ksvcGVR := schema.GroupVersionResource{
@@ -238,6 +252,7 @@ func (o *OkasanScheduler) watchKsvcCreateEvent() {
 	watcher, err := DYNCLIENT.Resource(ksvcGVR).Namespace(namespace).Watch(context.TODO(), metav1.ListOptions{
 		Watch: true,
 	})
+	bonalib.Log("watcher", watcher)
 	if err != nil {
 		fmt.Println(err)
 		panic(err.Error())
