@@ -26,7 +26,7 @@ type KodomoScraper struct {
 type Metrics struct {
 	// Serving time for traffic from node i to node j
 	Servt [][]int32
-	// Serving time for traffic from node i to node j
+	// Serving time for traffic from node i to be proccessed on node j
 	Respt [][]int32
 }
 

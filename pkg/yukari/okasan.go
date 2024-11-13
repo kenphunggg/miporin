@@ -161,28 +161,43 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 				continue
 			}
 
-			for k_ddp, v_ddp := range deltaDesiredPods {
-				for i := v_ddp; i != 0; { // Check for every node that have the change in number of pod
+			// k_ddp: nodename
+			// v_dpp: number of pod needed
+			for k_ddp, v_ddp := range deltaDesiredPods { // Check for every node that have the change in number of pod
+				for i := v_ddp; i != 0; {
 					if i < 0 { // If number of pod on that node decrease
 						currentDesiredPods[k_ddp]-- // Decrease the [currentDesiredPods] by 1
-						i++                         // Check for next node
+						i++                         // Continue decrease until reach 0
 					}
 					if i > 0 { // If number of pod on that node increase
 						minResponseTime = int32(1000000) // Set min response time to extreme high
 						minIdx = -1                      // Set min index to -1
+
+						// Get response time for traffic from node i to node j
+						// It is the matric like this
+						// Respt [i][j]int32
 						responseTime := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Metrics.Respt
-						for i_rpt := range responseTime[nodeidx[k_ddp]] { // loop each row of RESPONSETIME
+
+						// nodeidx[k_ddp]: convert nodename into number
+						// responseTime[nodeidx[k_ddp]]: response time for traffic from node [k_ddp]
+						// loop each row of RESPONSETIME - loop for the response time of trafficfrom node [k_ddp] to all nodes
+						for i_rpt := range responseTime[nodeidx[k_ddp]] {
+							// If [currentDesiredPods] in node [k_ddp] is not fewer than max pod in node [k_ddp]
+							// MAXPOD is set to []int{10, 10, 3} [in yukari/main.go]
 							if currentDesiredPods[k_ddp] >= int32(MAXPON[nodeidx[k_ddp]]) {
 								continue
 							} else {
+								// If response time from [k_ddp] to [i_rpt] lower than minimum response time
+								// This will always true cause minResponseTime is set to 1000000
 								if responseTime[nodeidx[k_ddp]][i_rpt] < minResponseTime {
-									minResponseTime = responseTime[nodeidx[k_ddp]][i_rpt]
-									minIdx = int32(i_rpt)
+									minResponseTime = responseTime[nodeidx[k_ddp]][i_rpt] // Update minResponseTime
+									minIdx = int32(i_rpt)                                 // it is served on node [i_rpt]
 								}
 							}
 						}
+						// This ensure that the system will not scale pod reach out of maximimum pod in node that have been set
 						if minIdx != -1 {
-							currentDesiredPods[NODENAMES[minIdx]]++
+							currentDesiredPods[NODENAMES[minIdx]]++ // Update current desired pod
 						}
 						i--
 					}
@@ -252,7 +267,6 @@ func (o *OkasanScheduler) watchKsvcCreateEvent() {
 	watcher, err := DYNCLIENT.Resource(ksvcGVR).Namespace(namespace).Watch(context.TODO(), metav1.ListOptions{
 		Watch: true,
 	})
-	bonalib.Log("watcher", watcher)
 	if err != nil {
 		fmt.Println(err)
 		panic(err.Error())
