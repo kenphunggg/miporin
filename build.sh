@@ -10,7 +10,7 @@ REDBGR='\033[0;41m'
 NCBGR='\033[0m'
 
 ########## CONFIG ##########
-DOCKER_REGISTRY="bonavadeur"
+DOCKER_REGISTRY="lazyken"
 IMAGE="miporin" # docker.io/{DOCKER_REGISTRY}/{IMAGE}
 NAMESPACE="knative-serving"
 component="miporin"
