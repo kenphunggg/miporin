@@ -219,11 +219,13 @@ func (o *OkasanScheduler) patchSchedule(desiredPods map[string]int32) {
 		Resource: "seikas",
 	}
 
-	// Define the patch data
+	// Define the patch data using the input
 	repurika := map[string]interface{}{}
 	for _, nodename := range NODENAMES {
 		repurika[nodename] = desiredPods[nodename]
 	}
+
+	// Prepare before convert to JSON
 	patchData := map[string]interface{}{
 		"spec": map[string]interface{}{
 			"repurika": repurika,
