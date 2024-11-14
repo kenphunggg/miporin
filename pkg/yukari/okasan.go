@@ -205,12 +205,78 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			}
 
 			bonalib.Log("currentDesiredPods", o.Name, currentDesiredPods)
+			o.algorithm(currentDesiredPods, kodomo)
 			o.patchSchedule(currentDesiredPods)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
 		}
 	}
 }
+
+// Start extension
+func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *KodomoScheduler) {
+	kodomoLatency := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Okasan.Latency
+	bonalib.Log("kodomoLatency", kodomoLatency)
+
+	bonalib.Log("desiredPods", desiredPods)
+
+	// Create region map
+	region := map[string]int32{}
+	for _, nodename := range NODENAMES {
+		region[nodename] = -1
+	}
+	for i := 0; i < len(NODENAMES); i++ {
+		if region[NODENAMES[i]] == -1 {
+			region[NODENAMES[i]] = int32(i)
+			for j := 0; j < len(NODENAMES); j++ {
+				if j != i && kodomoLatency[i][j]-kodomoLatency[i][i] <= 10 {
+					region[NODENAMES[j]] = int32(i)
+				}
+			}
+		} else {
+			continue
+		}
+	}
+	// Create a slice to store unique regions
+	regionList := []int32{}
+	seenRegions := make(map[int32]bool)
+	for _, reg := range region {
+		if !seenRegions[reg] {
+			seenRegions[reg] = true
+			regionList = append(regionList, reg)
+		}
+	}
+	bonalib.Log("list", regionList)
+
+	// Create newDesiredPods
+	newDesiredPods := map[string]int32{}
+	for _, nodename := range NODENAMES {
+		newDesiredPods[nodename] = 0
+	}
+	// Reassign nodes with more than one pod to other regions
+	for node, podCount := range desiredPods {
+		if podCount > 1 {
+			for newRegion, regCount := range region {
+				if regCount != region[node] && newDesiredPods[newRegion] == 0 {
+					newDesiredPods[node] -= 1
+					newDesiredPods[newRegion] += 1
+					break
+				}
+			}
+		} else if podCount == 1 {
+			for newRegion, _ := range region {
+				if newRegion != node {
+					newDesiredPods[node] = 0
+					newDesiredPods[newRegion] = 1
+					break
+				}
+			}
+		}
+	}
+	bonalib.Log("newDesiredPods", newDesiredPods)
+}
+
+// End extension
 
 func (o *OkasanScheduler) patchSchedule(desiredPods map[string]int32) {
 	gvr := schema.GroupVersionResource{
