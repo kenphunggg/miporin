@@ -206,6 +206,7 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 
 			bonalib.Log("currentDesiredPods", o.Name, currentDesiredPods)
 			o.algorithm(currentDesiredPods, kodomo)
+			bonalib.Log("updatedCurrentDesiredPods", o.Name, currentDesiredPods)
 			o.patchSchedule(currentDesiredPods)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
@@ -213,70 +214,114 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 	}
 }
 
-// Start extension
+// ------<>------START EXTENSION------<>------
 func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *KodomoScheduler) {
 	kodomoLatency := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Okasan.Latency
-	bonalib.Log("kodomoLatency", kodomoLatency)
+	// bonalib.Log("kodomoLatency", kodomoLatency)
 
-	bonalib.Log("desiredPods", desiredPods)
+	// bonalib.Log("desiredPods", desiredPods)
 
 	// Create region map
-	region := map[string]int32{}
+	regionMap := map[string]int32{}
 	for _, nodename := range NODENAMES {
-		region[nodename] = -1
+		regionMap[nodename] = -1
 	}
 	for i := 0; i < len(NODENAMES); i++ {
-		if region[NODENAMES[i]] == -1 {
-			region[NODENAMES[i]] = int32(i)
+		if regionMap[NODENAMES[i]] == -1 {
+			regionMap[NODENAMES[i]] = int32(i)
 			for j := 0; j < len(NODENAMES); j++ {
 				if j != i && kodomoLatency[i][j]-kodomoLatency[i][i] <= 10 {
-					region[NODENAMES[j]] = int32(i)
+					regionMap[NODENAMES[j]] = int32(i)
 				}
 			}
 		} else {
 			continue
 		}
 	}
-	// Create a slice to store unique regions
-	regionList := []int32{}
-	seenRegions := make(map[int32]bool)
-	for _, reg := range region {
-		if !seenRegions[reg] {
-			seenRegions[reg] = true
-			regionList = append(regionList, reg)
+	// bonalib.Log("regionMap", regionMap)
+
+	// Create a new map to store nodes by region
+	nodesByRegion := make(map[int32][]string)
+
+	// Iterate over the region map and populate nodesByRegion
+	for node, region := range regionMap {
+		nodesByRegion[region] = append(nodesByRegion[region], node)
+	}
+	// bonalib.Log("nodesByRegion", nodesByRegion)
+
+	// * Get total pod needed on each region
+	// Create a map that store pod needed on each region
+	regionDesiredPods := map[int32]int32{}
+	for regionId, _ := range nodesByRegion {
+		regionDesiredPods[regionId] = 0
+	}
+
+	// Store total number of pod needed on each region
+	for regionId, nodes := range nodesByRegion {
+		for _, node := range nodes {
+			for nodename, pods := range desiredPods {
+				if nodename == node {
+					regionDesiredPods[regionId] += pods
+				}
+			}
 		}
 	}
-	bonalib.Log("list", regionList)
+	// bonalib.Log("regionDesiredPods", regionDesiredPods)
+
+	// * Change regionDesiredPods needed on each region (algorithm)
+	// Create newRegionDesiredPods
+	newRegionDesiredPods := map[int32]int32{}
+	for regionId, _ := range nodesByRegion {
+		newRegionDesiredPods[regionId] = 0
+	}
+	// Adjust value on this region (algoorithm)
+	for regionId, _ := range nodesByRegion {
+		if regionId+1 < int32(len(nodesByRegion)) {
+			newRegionDesiredPods[regionId+1] = regionDesiredPods[regionId]
+		} else {
+			newRegionDesiredPods[0] = regionDesiredPods[int32(len(nodesByRegion))-1]
+		}
+
+	}
+	// bonalib.Log("newRegionDesiredPods", newRegionDesiredPods)
 
 	// Create newDesiredPods
 	newDesiredPods := map[string]int32{}
 	for _, nodename := range NODENAMES {
 		newDesiredPods[nodename] = 0
 	}
-	// Reassign nodes with more than one pod to other regions
-	for node, podCount := range desiredPods {
-		if podCount > 1 {
-			for newRegion, regCount := range region {
-				if regCount != region[node] && newDesiredPods[newRegion] == 0 {
-					newDesiredPods[node] -= 1
-					newDesiredPods[newRegion] += 1
-					break
-				}
-			}
-		} else if podCount == 1 {
-			for newRegion, _ := range region {
-				if newRegion != node {
-					newDesiredPods[node] = 0
-					newDesiredPods[newRegion] = 1
-					break
+
+	// Generate data for newDesiredPods
+	for regionId, pods := range newRegionDesiredPods {
+		if pods != 0 { // Find the region that need pod to open
+			for id, nodes := range nodesByRegion { // Find all pods on the region to open pod
+				if id == regionId {
+					nodeCount := len(nodes)
+					podsPerNode := pods / int32(nodeCount)
+					extraPods := pods % int32(nodeCount)
+
+					for _, node := range nodes {
+						newDesiredPods[node] = podsPerNode
+					}
+
+					for i := 0; i < int(extraPods); i++ {
+						newDesiredPods[nodes[i]]++
+					}
 				}
 			}
 		}
 	}
+
 	bonalib.Log("newDesiredPods", newDesiredPods)
+
+	// Update data on input(desiredPods) according to newDesiredPods
+	for nodename, pods := range newDesiredPods {
+		desiredPods[nodename] = pods
+	}
+
 }
 
-// End extension
+// ------<>------END EXTENSION------<>------
 
 func (o *OkasanScheduler) patchSchedule(desiredPods map[string]int32) {
 	gvr := schema.GroupVersionResource{
