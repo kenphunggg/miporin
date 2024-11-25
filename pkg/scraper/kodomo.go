@@ -141,6 +141,7 @@ func (k *KodomoScraper) scrape() {
 			}
 
 			k.Weight = w
+			bonalib.Log("weight", w)
 
 			time.Sleep(time.Duration(k.sleepTime) * time.Second)
 		}

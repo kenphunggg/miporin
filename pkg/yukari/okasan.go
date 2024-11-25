@@ -321,6 +321,28 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 
 }
 
+// Get total latency caused by cold start
+func (o *OkasanScheduler) switchingCost() {
+	// Get latency when creating a pod
+	// The value retrieved by counting avarage time when a pod of deployment x is turned on
+
+	// Get total cost caused by cold start
+}
+
+// Get total cost caused by latency between nodes
+func (o *OkasanScheduler) communicationCost() {
+	// Get latency between nodes
+
+	// Get total contribute between two node from same ksvc
+}
+
+// Get container running cost
+func (o *OkasanScheduler) containerRunningCost() {
+	// Get hardware resource paid for running a container
+
+	// Get total container on that ksvc
+}
+
 // ------<>------END EXTENSION------<>------
 
 func (o *OkasanScheduler) patchSchedule(desiredPods map[string]int32) {

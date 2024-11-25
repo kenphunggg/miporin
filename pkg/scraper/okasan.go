@@ -128,6 +128,7 @@ func (o *OkasanScraper) watchKsvcCreateEvent() {
 	watcher, err := DYNCLIENT.Resource(ksvcGVR).Namespace(namespace).Watch(context.TODO(), metav1.ListOptions{
 		Watch: true,
 	})
+
 	if err != nil {
 		fmt.Println(err)
 		panic(err.Error())
