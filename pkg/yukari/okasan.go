@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/bonavadeur/miporin/pkg/bonalib"
@@ -18,11 +20,12 @@ import (
 )
 
 type OkasanScheduler struct {
-	Name        string
-	sleepTime   int8
-	Kodomo      map[string]*KodomoScheduler
-	MaxPoN      map[string]int32
-	KPADecision map[string]map[string]int32 // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
+	Name              string
+	sleepTime         int8
+	Kodomo            map[string]*KodomoScheduler
+	MaxPoN            map[string]int32
+	KPADecision       map[string]map[string]int32 // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
+	communicationCost int64
 }
 
 func NewOkasanScheduler(
@@ -43,28 +46,27 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.watchKsvcCreateEvent()
 
+	go atarashiiOkasanScheduler.getCommunicationCost()
+
 	return atarashiiOkasanScheduler
 }
 
 // Create new [KodomoScheduler] for each ksvc
 func (o *OkasanScheduler) init() {
 	// Get all knative service
-	ksvcGVR := schema.GroupVersionResource{
-		Group:    "serving.knative.dev",
-		Version:  "v1",
-		Resource: "services",
-	}
+	// ksvcGVR := schema.GroupVersionResource{
+	// 	Group:    "serving.knative.dev",
+	// 	Version:  "v1",
+	// 	Resource: "services",
+	// }
 	// List all ksvc in default namespace and hold the value in [ksvcList]
-	ksvcList, err := DYNCLIENT.Resource(ksvcGVR).Namespace("default").List(context.TODO(), v1.ListOptions{})
+	pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), v1.ListOptions{})
 	if err != nil {
-		bonalib.Warn("Error listing Knative services:", err)
+		log.Fatalf("Error listing pods: %s", err)
 	}
-	// For each ksvc, create a new [Kodomo]
-	for _, ksvc := range ksvcList.Items {
-		ksvcName := ksvc.GetName()
-		child := NewKodomoScheduler(ksvcName, o.sleepTime)
-		o.addKodomo(child)
-	}
+
+	bonalib.Log("pods", pods.Items)
+
 }
 
 // This function make a http request to [Knative Autoscaler] to retrieve its information
@@ -216,10 +218,10 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 
 // ------<>------START EXTENSION------<>------
 func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *KodomoScheduler) {
+	// [o.Name] is OkasanScheduler.Name which is okaasan
+	//
 	kodomoLatency := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Okasan.Latency
-	// bonalib.Log("kodomoLatency", kodomoLatency)
-
-	// bonalib.Log("desiredPods", desiredPods)
+	// kodomoLatency := OKASAN_SCRAPERS[o.Name].Latency
 
 	// Create region map
 	regionMap := map[string]int32{}
@@ -238,7 +240,6 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 			continue
 		}
 	}
-	// bonalib.Log("regionMap", regionMap)
 
 	// Create a new map to store nodes by region
 	nodesByRegion := make(map[int32][]string)
@@ -247,7 +248,6 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 	for node, region := range regionMap {
 		nodesByRegion[region] = append(nodesByRegion[region], node)
 	}
-	// bonalib.Log("nodesByRegion", nodesByRegion)
 
 	// * Get total pod needed on each region
 	// Create a map that store pod needed on each region
@@ -266,7 +266,6 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 			}
 		}
 	}
-	// bonalib.Log("regionDesiredPods", regionDesiredPods)
 
 	// * Change regionDesiredPods needed on each region (algorithm)
 	// Create newRegionDesiredPods
@@ -283,7 +282,6 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 		}
 
 	}
-	// bonalib.Log("newRegionDesiredPods", newRegionDesiredPods)
 
 	// Create newDesiredPods
 	newDesiredPods := map[string]int32{}
@@ -322,7 +320,7 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 }
 
 // Get total latency caused by cold start
-func (o *OkasanScheduler) switchingCost() {
+func (o *OkasanScheduler) getSwitchingCost(kodomo *KodomoScheduler) {
 	// Get latency when creating a pod
 	// The value retrieved by counting avarage time when a pod of deployment x is turned on
 
@@ -330,14 +328,45 @@ func (o *OkasanScheduler) switchingCost() {
 }
 
 // Get total cost caused by latency between nodes
-func (o *OkasanScheduler) communicationCost() {
-	// Get latency between nodes
+func (o *OkasanScheduler) getCommunicationCost() {
+	status := make(chan bool)
+	for {
+		select {
+		case <-status:
+			return
+		default:
+			// Get latency between nodes
+			latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
+			bonalib.Log("latencyBetweenNodes", latencyBetweenNodes)
 
-	// Get total contribute between two node from same ksvc
+			// Define the GroupVersionResource for Pods
+			// ksvcGVR := schema.GroupVersionResource{
+			// 	Group:    "serving.knative.dev",
+			// 	Version:  "v1",
+			// 	Resource: "pods",
+			// }
+
+			// List all pods in the default namespace
+			pods, err := CLIENTSET.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
+			if err != nil {
+				log.Fatalf("Error listing pods: %s", err)
+			} // Filter and print pods running on the specified node
+			nodeName := "edge-node"
+			fmt.Printf("List of Pods on node %s:\n", nodeName)
+			for _, pod := range pods.Items {
+				if strings.Contains(pod.Spec.NodeName, nodeName) {
+					bonalib.Log("edge-node", pod.Name)
+				}
+			}
+
+			time.Sleep(time.Duration(o.sleepTime) * time.Second)
+		}
+	}
+
 }
 
 // Get container running cost
-func (o *OkasanScheduler) containerRunningCost() {
+func (o *OkasanScheduler) getContainerRunningCost() {
 	// Get hardware resource paid for running a container
 
 	// Get total container on that ksvc
