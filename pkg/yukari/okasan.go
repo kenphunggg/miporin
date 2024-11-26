@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/bonavadeur/miporin/pkg/bonalib"
@@ -26,6 +25,7 @@ type OkasanScheduler struct {
 	MaxPoN            map[string]int32
 	KPADecision       map[string]map[string]int32 // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
 	communicationCost int64
+	KsvcList []string
 }
 
 func NewOkasanScheduler(
@@ -46,6 +46,8 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.watchKsvcCreateEvent()
 
+	go atarashiiOkasanScheduler.getSeikaList()
+
 	go atarashiiOkasanScheduler.getCommunicationCost()
 
 	return atarashiiOkasanScheduler
@@ -54,19 +56,22 @@ func NewOkasanScheduler(
 // Create new [KodomoScheduler] for each ksvc
 func (o *OkasanScheduler) init() {
 	// Get all knative service
-	// ksvcGVR := schema.GroupVersionResource{
-	// 	Group:    "serving.knative.dev",
-	// 	Version:  "v1",
-	// 	Resource: "services",
-	// }
-	// List all ksvc in default namespace and hold the value in [ksvcList]
-	pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), v1.ListOptions{})
-	if err != nil {
-		log.Fatalf("Error listing pods: %s", err)
+	ksvcGVR := schema.GroupVersionResource{
+		Group:    "serving.knative.dev",
+		Version:  "v1",
+		Resource: "services",
 	}
-
-	bonalib.Log("pods", pods.Items)
-
+	// List all ksvc in default namespace and hold the value in [ksvcList]
+	ksvcList, err := DYNCLIENT.Resource(ksvcGVR).Namespace("default").List(context.TODO(), v1.ListOptions{})
+	if err != nil {
+		bonalib.Warn("Error listing Knative services:", err)
+	}
+	// For each ksvc, create a new [Kodomo]
+	for _, ksvc := range ksvcList.Items {
+		ksvcName := ksvc.GetName()
+		child := NewKodomoScheduler(ksvcName, o.sleepTime)
+		o.addKodomo(child)
+	}
 }
 
 // This function make a http request to [Knative Autoscaler] to retrieve its information
@@ -339,23 +344,20 @@ func (o *OkasanScheduler) getCommunicationCost() {
 			latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
 			bonalib.Log("latencyBetweenNodes", latencyBetweenNodes)
 
-			// Define the GroupVersionResource for Pods
-			// ksvcGVR := schema.GroupVersionResource{
-			// 	Group:    "serving.knative.dev",
-			// 	Version:  "v1",
-			// 	Resource: "pods",
-			// }
+			// List all pods in the default namespace 
+			pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), v1.ListOptions{})
+			if err != nil { 
+				log.Fatalf("Error listing pods: %s", err)  
+				} // Filter and print pods controlled by Seika/hello 
 
-			// List all pods in the default namespace
-			pods, err := CLIENTSET.CoreV1().Pods("").List(context.TODO(), v1.ListOptions{})
-			if err != nil {
-				log.Fatalf("Error listing pods: %s", err)
-			} // Filter and print pods running on the specified node
-			nodeName := "edge-node"
-			fmt.Printf("List of Pods on node %s:\n", nodeName)
+			// List all all pods
 			for _, pod := range pods.Items {
-				if strings.Contains(pod.Spec.NodeName, nodeName) {
-					bonalib.Log("edge-node", pod.Name)
+				for _, owner := range pod.OwnerReferences{
+					// Only get pods that controlled by seika
+					if owner.Kind == "Seika"{
+						bonalib.Log("seika", pod.Name)
+						bonalib.Log("Node", pod.Spec.NodeName)
+					}
 				}
 			}
 
@@ -469,4 +471,27 @@ func (o *OkasanScheduler) deleteKodomo(kodomo string) {
 	o.Kodomo[kodomo].ScheduleStop.Stop()
 	o.Kodomo[kodomo] = nil
 	delete(o.Kodomo, kodomo)
+}
+
+func (o* OkasanScheduler) getKsvcList(){
+	for {
+		// Get all knative service
+		ksvcGVR := schema.GroupVersionResource{
+			Group:    "serving.knative.dev",
+			Version:  "v1",
+			Resource: "services",
+		}
+		// List all ksvc in default namespace and hold the value in [ksvcList]
+		ksvcList, err := DYNCLIENT.Resource(ksvcGVR).Namespace("default").List(context.TODO(), v1.ListOptions{})
+		if err != nil {
+			bonalib.Warn("Error listing Knative services:", err)
+		}
+		// For each ksvc, create a new [Kodomo]
+		for _, ksvc := range ksvcList.Items {
+			// o.KsvcList = append(ksvc)
+			bonalib.Log("ksvc", ksvc)
+		}
+
+		bonalib.Log("ksvc", o.KsvcList)
+	}
 }
