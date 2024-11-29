@@ -85,11 +85,21 @@ func deleteSeika(ksvcName string) {
 		Resource(seikaGVR).
 		Namespace(namespace).
 		Delete(context.TODO(), ksvcName, metav1.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	})
+			PropagationPolicy: &deletePolicy,
+		})
 	if err != nil {
 		bonalib.Warn("Failed to delete Seika instance")
 	} else {
 		bonalib.Info("Deleted Seika instance", ksvcName)
 	}
+}
+
+// Function to check if a slice contains a specific value
+func contains(slice []string, value string) bool {
+	for _, v := range slice {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }

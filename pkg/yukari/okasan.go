@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bonavadeur/miporin/pkg/bonalib"
+	v1core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -24,8 +25,9 @@ type OkasanScheduler struct {
 	Kodomo            map[string]*KodomoScheduler
 	MaxPoN            map[string]int32
 	KPADecision       map[string]map[string]int32 // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
-	communicationCost int64
-	KsvcList []string
+	coldStartTime     map[string]float64          // (ms), ksvc:15ms for example
+	communicationCost float64
+	KsvcList          []string
 }
 
 func NewOkasanScheduler(
@@ -46,7 +48,9 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.watchKsvcCreateEvent()
 
-	go atarashiiOkasanScheduler.getSeikaList()
+	go atarashiiOkasanScheduler.getColdStartTime()
+
+	go atarashiiOkasanScheduler.getKsvcList()
 
 	go atarashiiOkasanScheduler.getCommunicationCost()
 
@@ -215,6 +219,7 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			o.algorithm(currentDesiredPods, kodomo)
 			bonalib.Log("updatedCurrentDesiredPods", o.Name, currentDesiredPods)
 			o.patchSchedule(currentDesiredPods)
+			// o.testSeika(currentDesiredPods)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
 		}
@@ -324,11 +329,43 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 
 }
 
-// Get total latency caused by cold start
-func (o *OkasanScheduler) getSwitchingCost(kodomo *KodomoScheduler) {
-	// Get latency when creating a pod
-	// The value retrieved by counting avarage time when a pod of deployment x is turned on
+// Get latency when creating a pod (cold start time)
+func (o *OkasanScheduler) getColdStartTime() {
+	watcherPending, errPending := CLIENTSET.CoreV1().Pods("default").Watch(context.TODO(), metav1.ListOptions{
+		FieldSelector: "status.phase=Pending",
+	})
+	if errPending != nil {
+		panic(errPending.Error())
+	}
 
+	var startTime time.Time
+
+	for {
+		for event := range watcherPending.ResultChan() {
+			pod, ok := event.Object.(*v1core.Pod)
+			if !ok {
+				fmt.Println("Unexpected object type")
+				continue
+			}
+
+			if event.Type == watch.Added {
+				bonalib.Log("A new pod is going to created:", pod.Name)
+				startTime = time.Now()
+				bonalib.Log("startTime", startTime)
+			} else if event.Type == watch.Deleted {
+				bonalib.Log("A new pod created", pod.Name)
+				endTime := time.Now()
+				bonalib.Log("endTime", endTime)
+				coldStartTime := endTime.Sub(startTime)
+				bonalib.Log("COLDSTARTTIME", coldStartTime)
+			}
+
+		}
+	}
+}
+
+// Get total latency caused by cold start
+func (o *OkasanScheduler) getSwitchingCost() {
 	// Get total cost caused by cold start
 }
 
@@ -342,26 +379,76 @@ func (o *OkasanScheduler) getCommunicationCost() {
 		default:
 			// Get latency between nodes
 			latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
-			bonalib.Log("latencyBetweenNodes", latencyBetweenNodes)
 
-			// List all pods in the default namespace 
+			// Create a map that store seika information
+			ksvcMap := make(map[string]map[string]int8)
+			for _, ksvc := range o.KsvcList {
+				ksvcMap[ksvc] = make(map[string]int8)
+				for _, node := range NODENAMES {
+					ksvcMap[ksvc][node] = int8(0)
+				}
+			}
+
+			// List all pods controlled by Seika and insert into ksvcMap
 			pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), v1.ListOptions{})
-			if err != nil { 
-				log.Fatalf("Error listing pods: %s", err)  
-				} // Filter and print pods controlled by Seika/hello 
+			if err != nil {
+				log.Fatalf("Error listing pods: %s", err)
+			} // Filter and print pods controlled by Seika
 
-			// List all all pods
 			for _, pod := range pods.Items {
-				for _, owner := range pod.OwnerReferences{
+				for _, owner := range pod.OwnerReferences {
 					// Only get pods that controlled by seika
-					if owner.Kind == "Seika"{
-						bonalib.Log("seika", pod.Name)
-						bonalib.Log("Node", pod.Spec.NodeName)
+					if owner.Kind == "Seika" {
+						for _, ksvc := range o.KsvcList {
+							for _, node := range NODENAMES {
+								labelSelector := "serving.knative.dev/service=" + ksvc
+
+								desiredPods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), v1.ListOptions{
+									LabelSelector: labelSelector,
+								})
+								if err != nil {
+									log.Fatalf("Error listing pods: %s", err)
+								}
+
+								podCount := int8(0)
+								for _, desiredPod := range desiredPods.Items {
+									if desiredPod.Spec.NodeName == node {
+										podCount++
+									}
+								}
+								if ksvcMap[ksvc] == nil {
+									continue
+								} else {
+									ksvcMap[ksvc][node] = podCount
+								}
+							}
+						}
 					}
 				}
 			}
 
+			// Get communication cost
+			cost := float64(0)
+			for i := range latencyBetweenNodes {
+				for j := range latencyBetweenNodes[i] {
+					if j == i {
+						continue
+					}
+					// Get total pods distributed to node i and j
+					for ksvc := range ksvcMap {
+						totalPods := ksvcMap[ksvc][NODENAMES[i]] + ksvcMap[ksvc][NODENAMES[j]]
+						cost += (float64(latencyBetweenNodes[i][j]) * float64(totalPods))
+					}
+				}
+			}
+			cost = cost / 2
+
+			o.communicationCost = float64(cost)
+
+			bonalib.Log("cost", o.communicationCost)
+
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
+
 		}
 	}
 
@@ -473,7 +560,7 @@ func (o *OkasanScheduler) deleteKodomo(kodomo string) {
 	delete(o.Kodomo, kodomo)
 }
 
-func (o* OkasanScheduler) getKsvcList(){
+func (o *OkasanScheduler) getKsvcList() {
 	for {
 		// Get all knative service
 		ksvcGVR := schema.GroupVersionResource{
@@ -488,10 +575,57 @@ func (o* OkasanScheduler) getKsvcList(){
 		}
 		// For each ksvc, create a new [Kodomo]
 		for _, ksvc := range ksvcList.Items {
-			// o.KsvcList = append(ksvc)
-			bonalib.Log("ksvc", ksvc)
+			if contains(o.KsvcList, ksvc.GetName()) {
+				continue
+			} else {
+				o.KsvcList = append(o.KsvcList, ksvc.GetName())
+			}
 		}
+		time.Sleep(time.Duration(o.sleepTime) * time.Second)
+	}
+}
 
-		bonalib.Log("ksvc", o.KsvcList)
+func (o *OkasanScheduler) testSeika(desiredPods map[string]int32) {
+	gvr := schema.GroupVersionResource{
+		Group:    "batch.bonavadeur.io",
+		Version:  "v1",
+		Resource: "seikas",
+	}
+
+	// Define the patch data using the input
+	repurika := map[string]interface{}{}
+	for _, nodename := range NODENAMES {
+		repurika[nodename] = desiredPods[nodename] + 1
+	}
+
+	// Prepare before convert to JSON
+	patchData := map[string]interface{}{
+		"spec": map[string]interface{}{
+			"repurika": repurika,
+		},
+	}
+
+	// Convert patch data to JSON
+	patchBytes, err := json.Marshal(patchData)
+	if err != nil {
+		fmt.Printf("Error marshalling patch data: %v", err)
+	}
+
+	// Namespace and resource name
+	namespace := "default"
+	resourceName := "hello"
+
+	// Execute the patch request
+	patchedResource, err := DYNCLIENT.Resource(gvr).
+		Namespace(namespace).
+		Patch(context.TODO(), resourceName, types.MergePatchType, patchBytes, metav1.PatchOptions{})
+	if err != nil {
+		bonalib.Warn("Error patching resource: ", err)
+	} else {
+		resource, found, _ := unstructured.NestedString(patchedResource.Object, "metadata", "name")
+		if !found {
+			bonalib.Warn("Seika not found:", err)
+		}
+		fmt.Println("Patched resource:", resource)
 	}
 }
