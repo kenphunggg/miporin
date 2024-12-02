@@ -103,3 +103,13 @@ func contains(slice []string, value string) bool {
 	}
 	return false
 }
+
+func removeValue(slice []string, value string) []string {
+	var result []string
+	for _, v := range slice {
+		if v != value {
+			result = append(result, v)
+		}
+	}
+	return result
+}

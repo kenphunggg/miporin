@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/bonavadeur/miporin/pkg/bonalib"
-	v1core "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -215,9 +215,9 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 				}
 			}
 
-			bonalib.Log("currentDesiredPods", o.Name, currentDesiredPods)
+			// bonalib.Log("currentDesiredPods", o.Name, currentDesiredPods)
 			o.algorithm(currentDesiredPods, kodomo)
-			bonalib.Log("updatedCurrentDesiredPods", o.Name, currentDesiredPods)
+			// bonalib.Log("updatedCurrentDesiredPods", o.Name, currentDesiredPods)
 			o.patchSchedule(currentDesiredPods)
 			// o.testSeika(currentDesiredPods)
 
@@ -320,7 +320,7 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 		}
 	}
 
-	bonalib.Log("newDesiredPods", newDesiredPods)
+	// bonalib.Log("newDesiredPods", newDesiredPods)
 
 	// Update data on input(desiredPods) according to newDesiredPods
 	for nodename, pods := range newDesiredPods {
@@ -331,35 +331,62 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 
 // Get latency when creating a pod (cold start time)
 func (o *OkasanScheduler) getColdStartTime() {
-	watcherPending, errPending := CLIENTSET.CoreV1().Pods("default").Watch(context.TODO(), metav1.ListOptions{
-		FieldSelector: "status.phase=Pending",
-	})
-	if errPending != nil {
-		panic(errPending.Error())
+	var (
+		startTime   time.Time
+		endTime     time.Time
+		podWatching []string
+	)
+
+	watcher, err := CLIENTSET.CoreV1().Pods("default").Watch(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		panic(err.Error())
 	}
+	for event := range watcher.ResultChan() {
+		pod, ok := event.Object.(*corev1.Pod)
+		if !ok {
+			fmt.Println("Unexpected object type")
+			continue
+		}
 
-	var startTime time.Time
+		// Filter pods owned by Seika
+		for _, ownerRef := range pod.OwnerReferences {
+			if ownerRef.Kind == "Seika" {
+				if pod.Status.Phase == corev1.PodPending {
+					if !contains(podWatching, pod.Name) {
+						bonalib.Log("A new pod is going to create:", pod.Name)
+						podWatching = append(podWatching, pod.Name)
+						startTime = time.Now()
+						bonalib.Log("podWatching", podWatching)
+					}
+				}
 
-	for {
-		for event := range watcherPending.ResultChan() {
-			pod, ok := event.Object.(*v1core.Pod)
-			if !ok {
-				fmt.Println("Unexpected object type")
-				continue
+				if pod.Status.Phase == corev1.PodRunning {
+					if contains(podWatching, pod.Name) {
+						allContainersReady := true
+						for _, containerStatus := range pod.Status.ContainerStatuses {
+							if !contains(podWatching, pod.Name) {
+								break
+							}
+							bonalib.Log("containerStatus", containerStatus)
+							if containerStatus.State.Running == nil || !containerStatus.Ready {
+								allContainersReady = false
+								bonalib.Log("containerStatus break", containerStatus)
+								break
+							}
+							if allContainersReady {
+								bonalib.Log("A new pod is created:", pod.Name)
+								endTime = time.Now()
+								coldStartTime := endTime.Sub(startTime)
+								bonalib.Log("COLDSTARTTIME", coldStartTime)
+								bonalib.Log("slice before", podWatching)
+								podWatching = removeValue(podWatching, pod.Name)
+								bonalib.Log("slice after", podWatching)
+							}
+						}
+					}
+
+				}
 			}
-
-			if event.Type == watch.Added {
-				bonalib.Log("A new pod is going to created:", pod.Name)
-				startTime = time.Now()
-				bonalib.Log("startTime", startTime)
-			} else if event.Type == watch.Deleted {
-				bonalib.Log("A new pod created", pod.Name)
-				endTime := time.Now()
-				bonalib.Log("endTime", endTime)
-				coldStartTime := endTime.Sub(startTime)
-				bonalib.Log("COLDSTARTTIME", coldStartTime)
-			}
-
 		}
 	}
 }
@@ -445,7 +472,7 @@ func (o *OkasanScheduler) getCommunicationCost() {
 
 			o.communicationCost = float64(cost)
 
-			bonalib.Log("cost", o.communicationCost)
+			bonalib.Log("CommunicationCost", o.communicationCost)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
 
