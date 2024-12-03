@@ -332,10 +332,11 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 // Get latency when creating a pod (cold start time)
 func (o *OkasanScheduler) getColdStartTime() {
 	var (
-		startTime   time.Time
-		endTime     time.Time
 		podWatching []string
 	)
+
+	startTime := make(map[string]time.Time)
+	endTime := make(map[string]time.Time)
 
 	watcher, err := CLIENTSET.CoreV1().Pods("default").Watch(context.TODO(), metav1.ListOptions{})
 	if err != nil {
@@ -355,8 +356,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 					if !contains(podWatching, pod.Name) {
 						bonalib.Log("A new pod is going to create:", pod.Name)
 						podWatching = append(podWatching, pod.Name)
-						startTime = time.Now()
-						bonalib.Log("podWatching", podWatching)
+						startTime[pod.Name] = time.Now()
 					}
 				}
 
@@ -367,25 +367,24 @@ func (o *OkasanScheduler) getColdStartTime() {
 							if !contains(podWatching, pod.Name) {
 								break
 							}
-							bonalib.Log("containerStatus", containerStatus)
 							if containerStatus.State.Running == nil || !containerStatus.Ready {
 								allContainersReady = false
-								bonalib.Log("containerStatus break", containerStatus)
 								break
 							}
 							if allContainersReady {
 								bonalib.Log("A new pod is created:", pod.Name)
-								endTime = time.Now()
-								coldStartTime := endTime.Sub(startTime)
+								endTime[pod.Name] = time.Now()
+								coldStartTime := float64(endTime[pod.Name].Sub(startTime[pod.Name]).Seconds())
 								bonalib.Log("COLDSTARTTIME", coldStartTime)
-								bonalib.Log("slice before", podWatching)
 								podWatching = removeValue(podWatching, pod.Name)
-								bonalib.Log("slice after", podWatching)
+								bonalib.Log("nodeName", pod.Spec.NodeName)
+								bonalib.Log("ksvc", pod.Labels["app"])
 							}
 						}
 					}
-
 				}
+
+				startTime, podWatching = autoExpire(startTime, podWatching, 10)
 			}
 		}
 	}

@@ -113,3 +113,18 @@ func removeValue(slice []string, value string) []string {
 	}
 	return result
 }
+
+func autoExpire(startTime map[string]time.Time, slice []string, durationTime int) (map[string]time.Time, []string) {
+	duration := time.Duration(durationTime) * time.Second
+	now := time.Now()
+
+	// Auto expire value inside a slice
+	for pod, start := range startTime {
+		if now.Sub(start) >= duration {
+			slice = removeValue(slice, pod)
+			delete(startTime, pod)
+		}
+	}
+
+	return startTime, slice
+}
