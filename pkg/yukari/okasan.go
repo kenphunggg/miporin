@@ -24,8 +24,8 @@ type OkasanScheduler struct {
 	sleepTime         int8
 	Kodomo            map[string]*KodomoScheduler
 	MaxPoN            map[string]int32
-	KPADecision       map[string]map[string]int32 // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
-	coldStartTime     map[string]float64          // (ms), ksvc:15ms for example
+	KPADecision       map[string]map[string]int32     // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
+	coldStartTime     map[string]map[string][]float64 // (ms), ksvc: node1: {15ms, 45ms} for example
 	communicationCost float64
 	KsvcList          []string
 }
@@ -349,7 +349,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 			continue
 		}
 
-		// Filter pods owned by Seika
+		// Get Cold Start Time
 		for _, ownerRef := range pod.OwnerReferences {
 			if ownerRef.Kind == "Seika" {
 				if pod.Status.Phase == corev1.PodPending {
@@ -375,10 +375,26 @@ func (o *OkasanScheduler) getColdStartTime() {
 								bonalib.Log("A new pod is created:", pod.Name)
 								endTime[pod.Name] = time.Now()
 								coldStartTime := float64(endTime[pod.Name].Sub(startTime[pod.Name]).Seconds())
-								bonalib.Log("COLDSTARTTIME", coldStartTime)
 								podWatching = removeValue(podWatching, pod.Name)
-								bonalib.Log("nodeName", pod.Spec.NodeName)
-								bonalib.Log("ksvc", pod.Labels["app"])
+								nodeName := pod.Spec.NodeName
+								ksvc := pod.Labels["app"]
+
+								if o.coldStartTime == nil {
+									// Initialize the outer map if it's nil
+									o.coldStartTime = make(map[string]map[string][]float64)
+								}
+								if o.coldStartTime[ksvc] == nil {
+									// Initialize the inner map if it's nil
+									o.coldStartTime[ksvc] = make(map[string][]float64)
+								}
+
+								o.coldStartTime[ksvc][nodeName] = append(o.coldStartTime[ksvc][nodeName], coldStartTime)
+
+								if len(o.coldStartTime[ksvc][nodeName]) >= 100 {
+									o.coldStartTime[ksvc][nodeName] = o.coldStartTime[ksvc][nodeName][1:]
+								}
+
+								bonalib.Log("Coldstart", o.coldStartTime)
 							}
 						}
 					}
@@ -393,6 +409,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 // Get total latency caused by cold start
 func (o *OkasanScheduler) getSwitchingCost() {
 	// Get total cost caused by cold start
+	
 }
 
 // Get total cost caused by latency between nodes
