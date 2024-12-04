@@ -409,7 +409,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 // Get total latency caused by cold start
 func (o *OkasanScheduler) getSwitchingCost() {
 	// Get total cost caused by cold start
-	
+
 }
 
 // Get total cost caused by latency between nodes
