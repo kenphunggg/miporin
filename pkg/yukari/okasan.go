@@ -54,6 +54,8 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.getCommunicationCost()
 
+	go atarashiiOkasanScheduler.getSwitchingCost()
+
 	return atarashiiOkasanScheduler
 }
 
@@ -215,8 +217,8 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 				}
 			}
 
-			// bonalib.Log("currentDesiredPods", o.Name, currentDesiredPods)
-			o.algorithm(currentDesiredPods, kodomo)
+			bonalib.Log("currentDesiredPods", o.Name, currentDesiredPods)
+			// o.algorithm(currentDesiredPods, kodomo)
 			// bonalib.Log("updatedCurrentDesiredPods", o.Name, currentDesiredPods)
 			o.patchSchedule(currentDesiredPods)
 			// o.testSeika(currentDesiredPods)
@@ -377,7 +379,8 @@ func (o *OkasanScheduler) getColdStartTime() {
 								coldStartTime := float64(endTime[pod.Name].Sub(startTime[pod.Name]).Seconds())
 								podWatching = removeValue(podWatching, pod.Name)
 								nodeName := pod.Spec.NodeName
-								ksvc := pod.Labels["app"]
+								// ksvc := pod.Labels["app"]
+								ksvc := pod.Labels["bonavadeur.io/seika"]
 
 								if o.coldStartTime == nil {
 									// Initialize the outer map if it's nil
@@ -400,7 +403,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 					}
 				}
 
-				startTime, podWatching = autoExpire(startTime, podWatching, 10)
+				startTime, podWatching = autoExpire(startTime, podWatching, 100)
 			}
 		}
 	}
@@ -408,7 +411,60 @@ func (o *OkasanScheduler) getColdStartTime() {
 
 // Get total latency caused by cold start
 func (o *OkasanScheduler) getSwitchingCost() {
+	currentDesiredPods := make(map[string]map[string]int32)
+	newDesiredPods := make(map[string]map[string]int32)
+	deltaDesiredPods := make(map[string]map[string]int32)
+	temp := make(map[string]map[string]int32)
+
+	firstTime := true
+
+	if o.KsvcList == nil {
+		time.Sleep(time.Duration(o.sleepTime) * time.Second)
+	}
+
+	for _, ksvc := range o.KsvcList {
+		currentDesiredPods[ksvc] = make(map[string]int32)
+		newDesiredPods[ksvc] = make(map[string]int32)
+		deltaDesiredPods[ksvc] = make(map[string]int32)
+		temp[ksvc] = make(map[string]int32)
+		for _, nodename := range NODENAMES {
+			currentDesiredPods[ksvc][nodename] = 0
+			newDesiredPods[ksvc][nodename] = 0
+			deltaDesiredPods[ksvc][nodename] = 0
+			temp[ksvc][nodename] = 0
+		}
+	}
+
 	// Get total cost caused by cold start
+	for {
+		if firstTime {
+			for _, ksvc := range o.KsvcList {
+				for _, nodename := range NODENAMES {
+					currentDesiredPods[ksvc][nodename] = o.KPADecision[ksvc][nodename]
+				}
+			}
+			firstTime = false
+		} else {
+			for _, ksvc := range o.KsvcList {
+				for _, nodename := range NODENAMES {
+					currentDesiredPods[ksvc][nodename] = newDesiredPods[ksvc][nodename]
+					newDesiredPods[ksvc][nodename] = o.KPADecision[ksvc][nodename]
+				}
+			}
+		}
+
+		// Calculate the differences on number of pods on each node
+		for _, ksvc := range o.KsvcList {
+			for _, nodename := range NODENAMES {
+				deltaDesiredPods[ksvc][nodename] = newDesiredPods[ksvc][nodename] - currentDesiredPods[ksvc][nodename]
+			}
+		}
+		bonalib.Log("NDP", newDesiredPods["hello"]["edge-node"])
+		bonalib.Log("cdp", currentDesiredPods["hello"]["edge-node"])
+		bonalib.Log("ddp", deltaDesiredPods["hello"]["edge-node"])
+
+		time.Sleep(time.Duration(o.sleepTime) * time.Second)
+	}
 
 }
 
@@ -488,7 +544,7 @@ func (o *OkasanScheduler) getCommunicationCost() {
 
 			o.communicationCost = float64(cost)
 
-			bonalib.Log("CommunicationCost", o.communicationCost)
+			// bonalib.Log("CommunicationCost", o.communicationCost)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
 

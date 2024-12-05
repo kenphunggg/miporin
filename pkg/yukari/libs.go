@@ -128,3 +128,15 @@ func autoExpire(startTime map[string]time.Time, slice []string, durationTime int
 
 	return startTime, slice
 }
+
+func calculateAverage(slice []float64) float64 {
+	if len(slice) == 0 {
+		return 0.0 // Return 0 if the slice is empty to avoid division by zero
+	}
+	var sum float64
+	for _, value := range slice {
+		sum += value
+	}
+	average := sum / float64(len(slice))
+	return average
+}
