@@ -27,6 +27,7 @@ type OkasanScheduler struct {
 	KPADecision       map[string]map[string]int32     // This value is retrieved by executing [OkasanScheduler.scrapeKPA]
 	coldStartTime     map[string]map[string][]float64 // (ms), ksvc: node1: {15ms, 45ms} for example
 	communicationCost float64
+	switchingCost     float64
 	KsvcList          []string
 }
 
@@ -54,7 +55,7 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.getCommunicationCost()
 
-	go atarashiiOkasanScheduler.getSwitchingCost()
+	// go atarashiiOkasanScheduler.getSwitchingCost()
 
 	return atarashiiOkasanScheduler
 }
@@ -337,6 +338,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 		podWatching []string
 	)
 
+	o.switchingCost = 0
 	startTime := make(map[string]time.Time)
 	endTime := make(map[string]time.Time)
 
@@ -354,6 +356,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 		// Get Cold Start Time
 		for _, ownerRef := range pod.OwnerReferences {
 			if ownerRef.Kind == "Seika" {
+				// Calculate Switching time when new pod is created
 				if pod.Status.Phase == corev1.PodPending {
 					if !contains(podWatching, pod.Name) {
 						bonalib.Log("A new pod is going to create:", pod.Name)
@@ -397,13 +400,20 @@ func (o *OkasanScheduler) getColdStartTime() {
 									o.coldStartTime[ksvc][nodeName] = o.coldStartTime[ksvc][nodeName][1:]
 								}
 
+								o.switchingCost += calculateAverage(o.coldStartTime[ksvc][nodeName])
+
 								bonalib.Log("Coldstart", o.coldStartTime)
+
+								bonalib.Log("SwitchingCost", o.switchingCost)
 							}
 						}
 					}
 				}
+				bonalib.Log("Status", pod.Status.Phase)
 
-				startTime, podWatching = autoExpire(startTime, podWatching, 100)
+				startTime, podWatching = autoExpire(startTime, podWatching, 100) // After 100s, delete the pod that are watched to look for calculate switching cost
+
+				bonalib.Log("event", event.Type)
 			}
 		}
 	}
