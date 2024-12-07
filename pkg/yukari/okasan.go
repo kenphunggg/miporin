@@ -49,7 +49,7 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.watchKsvcCreateEvent()
 
-	go atarashiiOkasanScheduler.getColdStartTime()
+	go atarashiiOkasanScheduler.getSwitchingCost()
 
 	go atarashiiOkasanScheduler.getKsvcList()
 
@@ -163,6 +163,9 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			for k_cdp := range currentDesiredPods {
 				deltaDesiredPods[k_cdp] = newDesiredPods[k_cdp] - currentDesiredPods[k_cdp]
 			}
+			bonalib.Log("___NDP___", newDesiredPods)
+			bonalib.Log("cdp", currentDesiredPods)
+			bonalib.Log("delta", deltaDesiredPods)
 
 			for _, v_dpp := range deltaDesiredPods {
 				if v_dpp != 0 { // if have any change in delta, break and go to following steps
@@ -333,9 +336,10 @@ func (o *OkasanScheduler) algorithm(desiredPods map[string]int32, kodomo *Kodomo
 }
 
 // Get latency when creating a pod (cold start time)
-func (o *OkasanScheduler) getColdStartTime() {
+func (o *OkasanScheduler) getSwitchingCost() {
 	var (
 		podWatching []string
+		// podModify   []string
 	)
 
 	o.switchingCost = 0
@@ -359,7 +363,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 				// Calculate Switching time when new pod is created
 				if pod.Status.Phase == corev1.PodPending {
 					if !contains(podWatching, pod.Name) {
-						bonalib.Log("A new pod is going to create:", pod.Name)
+						// bonalib.Log("A new pod is going to create:", pod.Name)
 						podWatching = append(podWatching, pod.Name)
 						startTime[pod.Name] = time.Now()
 					}
@@ -377,7 +381,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 								break
 							}
 							if allContainersReady {
-								bonalib.Log("A new pod is created:", pod.Name)
+								// bonalib.Log("A new pod is created:", pod.Name)
 								endTime[pod.Name] = time.Now()
 								coldStartTime := float64(endTime[pod.Name].Sub(startTime[pod.Name]).Seconds())
 								podWatching = removeValue(podWatching, pod.Name)
@@ -402,80 +406,23 @@ func (o *OkasanScheduler) getColdStartTime() {
 
 								o.switchingCost += calculateAverage(o.coldStartTime[ksvc][nodeName])
 
-								bonalib.Log("Coldstart", o.coldStartTime)
-
+								// bonalib.Log("Coldstart", o.coldStartTime)
 								bonalib.Log("SwitchingCost", o.switchingCost)
 							}
 						}
 					}
 				}
-				bonalib.Log("Status", pod.Status.Phase)
 
 				startTime, podWatching = autoExpire(startTime, podWatching, 100) // After 100s, delete the pod that are watched to look for calculate switching cost
 
-				bonalib.Log("event", event.Type)
-			}
-		}
-	}
-}
-
-// Get total latency caused by cold start
-func (o *OkasanScheduler) getSwitchingCost() {
-	currentDesiredPods := make(map[string]map[string]int32)
-	newDesiredPods := make(map[string]map[string]int32)
-	deltaDesiredPods := make(map[string]map[string]int32)
-	temp := make(map[string]map[string]int32)
-
-	firstTime := true
-
-	if o.KsvcList == nil {
-		time.Sleep(time.Duration(o.sleepTime) * time.Second)
-	}
-
-	for _, ksvc := range o.KsvcList {
-		currentDesiredPods[ksvc] = make(map[string]int32)
-		newDesiredPods[ksvc] = make(map[string]int32)
-		deltaDesiredPods[ksvc] = make(map[string]int32)
-		temp[ksvc] = make(map[string]int32)
-		for _, nodename := range NODENAMES {
-			currentDesiredPods[ksvc][nodename] = 0
-			newDesiredPods[ksvc][nodename] = 0
-			deltaDesiredPods[ksvc][nodename] = 0
-			temp[ksvc][nodename] = 0
-		}
-	}
-
-	// Get total cost caused by cold start
-	for {
-		if firstTime {
-			for _, ksvc := range o.KsvcList {
-				for _, nodename := range NODENAMES {
-					currentDesiredPods[ksvc][nodename] = o.KPADecision[ksvc][nodename]
-				}
-			}
-			firstTime = false
-		} else {
-			for _, ksvc := range o.KsvcList {
-				for _, nodename := range NODENAMES {
-					currentDesiredPods[ksvc][nodename] = newDesiredPods[ksvc][nodename]
-					newDesiredPods[ksvc][nodename] = o.KPADecision[ksvc][nodename]
+				if event.Type == "DELETED" {
+					minusSwitchingCost := calculateAverage(o.coldStartTime[pod.Labels["bonavadeur.io/seika"]][pod.Spec.NodeName])
+					o.switchingCost -= minusSwitchingCost
+					bonalib.Log("SwitchingCost", o.switchingCost)
 				}
 			}
 		}
-
-		// Calculate the differences on number of pods on each node
-		for _, ksvc := range o.KsvcList {
-			for _, nodename := range NODENAMES {
-				deltaDesiredPods[ksvc][nodename] = newDesiredPods[ksvc][nodename] - currentDesiredPods[ksvc][nodename]
-			}
-		}
-		bonalib.Log("NDP", newDesiredPods["hello"]["edge-node"])
-		bonalib.Log("cdp", currentDesiredPods["hello"]["edge-node"])
-		bonalib.Log("ddp", deltaDesiredPods["hello"]["edge-node"])
-
-		time.Sleep(time.Duration(o.sleepTime) * time.Second)
 	}
-
 }
 
 // Get total cost caused by latency between nodes
@@ -554,7 +501,7 @@ func (o *OkasanScheduler) getCommunicationCost() {
 
 			o.communicationCost = float64(cost)
 
-			// bonalib.Log("CommunicationCost", o.communicationCost)
+			bonalib.Log("CommunicationCost", o.communicationCost)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
 
@@ -691,50 +638,5 @@ func (o *OkasanScheduler) getKsvcList() {
 			}
 		}
 		time.Sleep(time.Duration(o.sleepTime) * time.Second)
-	}
-}
-
-func (o *OkasanScheduler) testSeika(desiredPods map[string]int32) {
-	gvr := schema.GroupVersionResource{
-		Group:    "batch.bonavadeur.io",
-		Version:  "v1",
-		Resource: "seikas",
-	}
-
-	// Define the patch data using the input
-	repurika := map[string]interface{}{}
-	for _, nodename := range NODENAMES {
-		repurika[nodename] = desiredPods[nodename] + 1
-	}
-
-	// Prepare before convert to JSON
-	patchData := map[string]interface{}{
-		"spec": map[string]interface{}{
-			"repurika": repurika,
-		},
-	}
-
-	// Convert patch data to JSON
-	patchBytes, err := json.Marshal(patchData)
-	if err != nil {
-		fmt.Printf("Error marshalling patch data: %v", err)
-	}
-
-	// Namespace and resource name
-	namespace := "default"
-	resourceName := "hello"
-
-	// Execute the patch request
-	patchedResource, err := DYNCLIENT.Resource(gvr).
-		Namespace(namespace).
-		Patch(context.TODO(), resourceName, types.MergePatchType, patchBytes, metav1.PatchOptions{})
-	if err != nil {
-		bonalib.Warn("Error patching resource: ", err)
-	} else {
-		resource, found, _ := unstructured.NestedString(patchedResource.Object, "metadata", "name")
-		if !found {
-			bonalib.Warn("Seika not found:", err)
-		}
-		fmt.Println("Patched resource:", resource)
 	}
 }
