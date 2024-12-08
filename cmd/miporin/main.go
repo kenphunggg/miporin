@@ -67,5 +67,9 @@ func server() {
 		}
 	})
 
+	e.GET("/api/podcidr", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, miporin.GetPodsCIDRs())
+	})
+
 	e.Logger.Fatal(e.Start(":18080"))
 }
