@@ -163,10 +163,6 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			for k_cdp := range currentDesiredPods {
 				deltaDesiredPods[k_cdp] = newDesiredPods[k_cdp] - currentDesiredPods[k_cdp]
 			}
-			bonalib.Log("___NDP___", newDesiredPods)
-			bonalib.Log("cdp", currentDesiredPods)
-			bonalib.Log("delta", deltaDesiredPods)
-
 			for _, v_dpp := range deltaDesiredPods {
 				if v_dpp != 0 { // if have any change in delta, break and go to following steps
 					break
@@ -363,7 +359,7 @@ func (o *OkasanScheduler) getSwitchingCost() {
 				// Calculate Switching time when new pod is created
 				if pod.Status.Phase == corev1.PodPending {
 					if !contains(podWatching, pod.Name) {
-						// bonalib.Log("A new pod is going to create:", pod.Name)
+						bonalib.Log("A new pod is going to create:", pod.Name)
 						podWatching = append(podWatching, pod.Name)
 						startTime[pod.Name] = time.Now()
 					}
@@ -381,7 +377,7 @@ func (o *OkasanScheduler) getSwitchingCost() {
 								break
 							}
 							if allContainersReady {
-								// bonalib.Log("A new pod is created:", pod.Name)
+								bonalib.Log("A new pod is created:", pod.Name)
 								endTime[pod.Name] = time.Now()
 								coldStartTime := float64(endTime[pod.Name].Sub(startTime[pod.Name]).Seconds())
 								podWatching = removeValue(podWatching, pod.Name)
@@ -508,13 +504,6 @@ func (o *OkasanScheduler) getCommunicationCost() {
 		}
 	}
 
-}
-
-// Get container running cost
-func (o *OkasanScheduler) getContainerRunningCost() {
-	// Get hardware resource paid for running a container
-
-	// Get total container on that ksvc
 }
 
 // ------<>------END EXTENSION------<>------
