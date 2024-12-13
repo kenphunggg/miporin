@@ -47,7 +47,7 @@ func AddMatrix(MatA [][]int32, MatB [][]int32) [][]int32 {
 	return MatC
 }
 
-// Conver [string] to [float]
+// Convert [string] to [float]
 func String2RoundedInt(s string) int32 {
 	floatValue, _ := strconv.ParseFloat(s, 32)
 	if math.IsNaN(floatValue) {

@@ -140,3 +140,43 @@ func calculateAverage(slice []float64) float64 {
 	average := sum / float64(len(slice))
 	return average
 }
+
+func ceilDivide(a, b int) int {
+	result := a / b
+	if a%b != 0 {
+		result++
+	}
+	return result
+}
+
+func getTargetAnnotation(config interface{}) (string, error) {
+	configMap, ok := config.(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("invalid configuration format")
+	}
+
+	spec, ok := configMap["spec"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("'spec' not found in configuration")
+	}
+
+	template, ok := spec["template"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("'template' not found in spec")
+	}
+
+	metadata, ok := template["metadata"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("'metadata' not found in template")
+	}
+
+	annotations, ok := metadata["annotations"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("'annotations' not found in metadata")
+	}
+	target, ok := annotations["autoscaling.knative.dev/target"].(string)
+	if !ok {
+		return "", fmt.Errorf("'autoscaling.knative.dev/target' not found in annotations")
+	}
+	return target, nil
+}

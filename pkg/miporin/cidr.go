@@ -85,6 +85,10 @@ func GetPodsCIDRs() []PodCIDR {
 			}
 		}
 	}
+	// bonalib.Log("Nodename", ret[0].Nodename)
+	// bonalib.Log("NodeIp", ret[0].NodeIP)
+	// bonalib.Log("PodIpRange", ret[0].PodIPRange)
+	// bonalib.Log("PodIpRange", ret[0].PodPrefix)
 
 	return ret
 }
