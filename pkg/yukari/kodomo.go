@@ -207,7 +207,7 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 
 			k.Decision = desiredPods
 
-			bonalib.Log("k.Decision", k.Decision)
+			// bonalib.Log("k.Decision", k.Decision)
 
 			time.Sleep(time.Duration(k.sleepTime) * time.Second)
 		}
