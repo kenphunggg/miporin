@@ -29,9 +29,9 @@ type OkasanScheduler struct {
 	KPACus            map[string]map[string]int32
 	coldStartTime     map[string]map[string][]float64 // (ms), ksvc: node1: {15ms, 45ms} for example
 	communicationCost float64
-	switchingCost     float64
 	KsvcList          []string
-	ksvcMap           map[string]map[string]int8
+	// switchingCost     float64
+	ksvcMap map[string]map[string]int8
 }
 
 func NewOkasanScheduler(
@@ -148,15 +148,17 @@ func (o *OkasanScheduler) scrapeKPACus() {
 		}
 		response.Body.Close()
 
-		for ksvc, pods := range tempCusInNode {
+		for ksvc, nodes := range tempCusInNode {
 			cusInNode[ksvc] = map[string]int32{}
-			for pod, cusUser := range pods {
-				cusInNode[ksvc][pod] = int32(math.Ceil(cusUser))
+			for node, cusUser := range nodes {
+				cusInNode[ksvc][node] = int32(math.Ceil(cusUser))
 			}
 		}
 
 		// [Okasan.KPADecision] will hold the value of [decideInNode]
 		o.KPACus = cusInNode
+
+		bonalib.Log("o.KPACus", o.KPACus)
 
 		time.Sleep(time.Duration(o.sleepTime) * time.Second)
 	}
@@ -296,7 +298,7 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 		nodeidx[nodename] = i
 	}
 
-	o.switchingCost = 0
+	o.switchingCost := 0
 
 	for {
 		select {
@@ -329,6 +331,8 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 				time.Sleep(time.Duration(o.sleepTime) * time.Second)
 				continue
 			}
+
+			// o.algorithm(deltaDesiredPods, kodomo)
 
 			// for nodeName, pods := range deltaDesiredPods {
 			// 	for i := v_ddp; i != 0; {
@@ -404,7 +408,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 							if allContainersReady {
 								// bonalib.Log("A new pod is created:", pod.Name)
 								endTime[pod.Name] = time.Now()
-								coldStartTime := float64(endTime[pod.Name].Sub(startTime[pod.Name]).Seconds())
+								coldStartTime := float64(endTime[pod.Name].Sub(startTime[pod.Name]).Seconds()) * 1000 // in miliseconds
 								podWatching = removeValue(podWatching, pod.Name)
 								nodeName := pod.Spec.NodeName
 								// ksvc := pod.Labels["app"]
@@ -426,6 +430,7 @@ func (o *OkasanScheduler) getColdStartTime() {
 								}
 
 								// o.switchingCost += calculateAverage(o.coldStartTime[ksvc][nodeName])
+								// o.switchingCost += calculateAverage(o.coldStartTime[ksvc][nodeName])
 
 								// bonalib.Log("Coldstart", o.coldStartTime)
 								// bonalib.Log("SwitchingCost", o.switchingCost)
@@ -436,6 +441,11 @@ func (o *OkasanScheduler) getColdStartTime() {
 
 				startTime, podWatching = autoExpire(startTime, podWatching, 100) // After 100s, delete the pod that are watched to look for calculate switching cost
 
+				// if event.Type == "DELETED" {
+				// 	minusSwitchingCost := calculateAverage(o.coldStartTime[pod.Labels["bonavadeur.io/seika"]][pod.Spec.NodeName])
+				// 	o.switchingCost -= minusSwitchingCost
+				// 	// bonalib.Log("SwitchingCost", o.switchingCost)
+				// }
 				// if event.Type == "DELETED" {
 				// 	minusSwitchingCost := calculateAverage(o.coldStartTime[pod.Labels["bonavadeur.io/seika"]][pod.Spec.NodeName])
 				// 	o.switchingCost -= minusSwitchingCost
