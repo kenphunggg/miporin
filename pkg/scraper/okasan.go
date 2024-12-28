@@ -108,6 +108,8 @@ func (o *OkasanScraper) scrapeLatency() [][]int32 {
 			latency[nodeIndex[lrMetric["from"].(string)]][nodeIndex[lrMetric["to"].(string)]] = lrValue
 		}
 
+		// bonalib.Log("latency", latency)
+
 		// Import value into [OkasanScraper]
 		o.Latency = latency
 

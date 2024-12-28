@@ -97,6 +97,11 @@ func (k *KodomoScraper) scrape() {
 			// Response time equal Serving time plus Latency
 			// Serving time scraped from Service monitor by Kodomo
 			// Latency between nodes scraped from Prometheus by Okasan
+			if k.Metrics.Servt == nil || k.Okasan.Latency == nil {
+				time.Sleep(time.Duration(k.sleepTime) * time.Second)
+				continue
+			}
+
 			k.Metrics.Respt = libs.AddMatrix(k.Metrics.Servt, k.Okasan.Latency)
 
 			// Make a empty 2D "weight" slice
