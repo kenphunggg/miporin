@@ -460,7 +460,7 @@ func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 			return
 		default:
 			// Get latency between nodes
-			// latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
+			latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
 			weightMatrix := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Weight
 
 			// Get total number of pods on each node
@@ -499,25 +499,6 @@ func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 			// 	}
 			// }
 
-			// for i := range latencyBetweenNodes {
-			// 	for j := range latencyBetweenNodes[i] {
-			// 		if j == i {
-			// 			continue
-			// 		}
-			// 		if o.KPACus == nil {
-			// 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
-			// 		}
-			// 		var k int8
-			// 		for _, cus := range kodomo.Cus {
-			// 			if k == i {
-			// 				k++
-			// 				continue
-			// 			}
-
-			// 		}
-			// 	}
-			// }
-
 			// Create serving cus matrix
 			// serCusMatrix[i][j] means x cus from node i will be served at node j
 			// serCusMatrix := [][]float64{}
@@ -541,7 +522,18 @@ func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 			bonalib.Log("serCusMatrix", serCusMatrix)
 			// cost = cost / 2
 
-			o.communicationCost = float64(cost)
+			// Calculate communication cost
+			for i := range weightMatrix {
+				for j := range weightMatrix[i] {
+					if j == i {
+						continue
+					}
+					cost += float64(latencyBetweenNodes[i][j]) * (float64(currentPodInNode[NODENAMES[i]]) + float64(currentPodInNode[NODENAMES[j]]))
+				}
+			}
+			bonalib.Log("cost", cost)
+
+			// o.communicationCost = float64(cost)
 			bonalib.Log("Weight  matrix", OKASAN_SCRAPERS["okaasan"].Kodomo[kodomo.Name].Weight)
 
 			// bonalib.Log("latency", latencyBetweenNodes)
