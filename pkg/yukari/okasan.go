@@ -30,8 +30,8 @@ type OkasanScheduler struct {
 	coldStartTime     map[string]map[string][]float64 // (ms), ksvc: node1: {15ms, 45ms} for example
 	communicationCost float64
 	KsvcList          []string
+	ksvcMap           map[string]map[string]int8
 	// switchingCost     float64
-	ksvcMap map[string]map[string]int8
 }
 
 func NewOkasanScheduler(
@@ -158,7 +158,7 @@ func (o *OkasanScheduler) scrapeKPACus() {
 		// [Okasan.KPADecision] will hold the value of [decideInNode]
 		o.KPACus = cusInNode
 
-		bonalib.Log("o.KPACus", o.KPACus)
+		// bonalib.Log("o.KPACus", o.KPACus)
 
 		time.Sleep(time.Duration(o.sleepTime) * time.Second)
 	}
@@ -298,7 +298,7 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 		nodeidx[nodename] = i
 	}
 
-	o.switchingCost := 0
+	// o.switchingCost := 0
 
 	for {
 		select {
@@ -332,20 +332,20 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 				continue
 			}
 
-			// o.algorithm(deltaDesiredPods, kodomo)
+			o.algorithm(kodomo, deltaDesiredPods)
 
-			// for nodeName, pods := range deltaDesiredPods {
-			// 	for i := v_ddp; i != 0; {
-			// 		if i < 0 { // If number of pod on that node decrease
-			// 			currentDesiredPods[k_ddp]-- // Decrease the [currentDesiredPods] by 1
-			// 			i++                         // Continue decrease until reach 0
-			// 		}
-			// 	}
-			// }
-
-			o.algorithm(deltaDesiredPods)
-
-			currentDesiredPods = newDesiredPods
+			for node, pods := range deltaDesiredPods {
+				for currentPods := pods; currentPods != 0; {
+					if currentPods < 0 {
+						currentDesiredPods[node]--
+						currentPods++
+					}
+					if currentPods > 0 {
+						currentDesiredPods[node]++
+						currentPods--
+					}
+				}
+			}
 
 			o.patchSchedule(currentDesiredPods)
 
@@ -471,23 +471,6 @@ func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 				continue
 			}
 
-			// cost := float64(0)
-			// for i := range latencyBetweenNodes {
-			// 	for j := range latencyBetweenNodes[i] {
-			// 		if j == i {
-			// 			continue
-			// 		}
-			// 		// Get total pods distributed to node i and j
-			// 		for ksvc := range o.ksvcMap {
-			// 			totalPods := o.ksvcMap[ksvc][NODENAMES[i]] + o.ksvcMap[ksvc][NODENAMES[j]]
-			// 			cost += (float64(latencyBetweenNodes[i][j]) * float64(totalPods))
-			// 		}
-			// 	}
-			// }
-			// cost = cost / 2
-
-			// o.communicationCost = float64(cost)
-
 			nodeIdx := make(map[string]int, len(NODENAMES))
 			// Map each node name to its index
 			for idx, node := range NODENAMES {
@@ -516,15 +499,49 @@ func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 	}
 }
 
-func (o *OkasanScheduler) algorithm(deltaDesiredPods map[string]int32) {
+func (o *OkasanScheduler) algorithm(kodomo *KodomoScheduler, deltaDesiredPods map[string]int32) map[string]int32 {
 	for _, node := range NODENAMES {
 		if deltaDesiredPods[node] <= 0 {
-			break
+			continue
 		}
 		if deltaDesiredPods[node] > 0 {
-			break
+			// CALCULATE NEW COMMUNICATION COST
+			latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
+			currentPodOnNode := o.ksvcMap[kodomo.Name]
+
+			bonusCommunicationCost := float64(0)
+			for source := range latencyBetweenNodes {
+				if NODENAMES[source] == node {
+					for des := range latencyBetweenNodes[source] {
+						bonusCommunicationCost += (float64(currentPodOnNode[NODENAMES[des]]) * float64(latencyBetweenNodes[source][des]))
+					}
+				}
+			}
+			bonalib.Log("Bonus Communication Cost", bonusCommunicationCost)
+
+			// CALCULATE NEW SWITCHING COST
+			coldStartTime := calculateAverage(o.coldStartTime[kodomo.Name][node])
+			// bonusSwitchingCost := coldStartTime * float64(deltaDesiredPods[node])
+			// bonalib.Log("Bonus Switching Cost", bonusSwitchingCost)
+
+			// Calculate minimum total number of pods
+
+			// DECIDE TO CREATE NEW POD
+			for currentPods := deltaDesiredPods[node]; currentPods != 0; {
+				bonusSwitchingCost := coldStartTime * float64(deltaDesiredPods[node])
+
+				// Decide whether to create new pod or not
+				if bonusSwitchingCost > bonusCommunicationCost {
+					currentPods--
+					deltaDesiredPods[node]--
+				} else {
+					break
+				}
+			}
+
 		}
 	}
+	return deltaDesiredPods
 }
 
 // ------<>------END EXTENSION------<>------
