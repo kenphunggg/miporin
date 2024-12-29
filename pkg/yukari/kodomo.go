@@ -21,6 +21,7 @@ type KodomoScheduler struct {
 	sleepTime    int8
 	Okasan       *OkasanScheduler
 	ScheduleStop *StopChan
+	AuTarget     int
 }
 
 type StopChan struct {
@@ -43,11 +44,12 @@ func NewKodomoScheduler(
 		atarashiiKodomoScheduler.Decision[nodename] = int32(0)
 	}
 
+	auTarget, _ := autoscalingTarget(atarashiiKodomoScheduler)
+	atarashiiKodomoScheduler.AuTarget = bonalib.Str2Int(auTarget)
+
 	go atarashiiKodomoScheduler.schedule()
 
 	go atarashiiKodomoScheduler.scrapePodAutoScaling()
-
-	// go atarashiiKodomoScheduler.test()
 
 	return atarashiiKodomoScheduler
 }
@@ -63,24 +65,6 @@ func NewStopChan() *StopChan {
 func (s *StopChan) Stop() {
 	s.Kodomo <- true
 	s.Okasan <- true
-}
-
-func (k *KodomoScheduler) test() {
-	for {
-		select {
-		case <-k.ScheduleStop.Kodomo:
-			return
-		default:
-			// k.Decision = k.Okasan.KPADecision[k.Name]
-			kodomoRespt := OKASAN_SCRAPERS[k.Okasan.Name].Kodomo[k.Name].Metrics.Respt
-			kodomoKPAcus := k.Cus
-
-			bonalib.Log("resp", kodomoRespt)
-			bonalib.Log("KPAcus", kodomoKPAcus)
-
-			time.Sleep(time.Duration(k.sleepTime) * time.Second)
-		}
-	}
 }
 
 func (k *KodomoScheduler) schedule() {
@@ -100,6 +84,7 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 	for {
 		select {
 		case <-k.ScheduleStop.Kodomo:
+			bonalib.Log("STOP SCRAPE POD AUTOSCALING", k.Name)
 			return
 		default:
 			// RETRIEVE VALUE FROM OKASAN STRUCT
@@ -109,7 +94,7 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 			kodomoKPAcus := k.Cus
 
 			if kodomoKPAcus == nil || kodomoRespt == nil {
-				time.Sleep(time.Duration(k.sleepTime*2) * time.Second)
+				time.Sleep(time.Duration(k.sleepTime) * time.Second)
 				continue
 			}
 

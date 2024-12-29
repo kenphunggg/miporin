@@ -60,10 +60,6 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.getKsvcMap()
 
-	// go atarashiiOkasanScheduler.getCommunicationCost()
-
-	// go atarashiiOkasanScheduler.getSwitchingCost()
-
 	return atarashiiOkasanScheduler
 }
 
@@ -332,7 +328,8 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 				continue
 			}
 
-			o.algorithm(kodomo, deltaDesiredPods)
+			// Cross-Edge algorithm
+			o.algorithm(kodomo, currentDesiredPods, deltaDesiredPods)
 
 			for node, pods := range deltaDesiredPods {
 				for currentPods := pods; currentPods != 0; {
@@ -478,30 +475,38 @@ func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 			}
 			// Get communication cost
 			cost := float32(0)
-			for source, value := range cus {
+			for source, cusInSource := range cus {
 				for des := range weightMatrix[nodeIdx[source]] {
-					if float32(value)*float32(weightMatrix[nodeIdx[source]][des])/100 != 0 {
+					if float32(cusInSource)*float32(weightMatrix[nodeIdx[source]][des])/100 != 0 && latencyBetweenNodes[nodeIdx[source]][des] > 30 {
 						totalPods := o.ksvcMap[kodomo.Name][NODENAMES[des]]
 						cost += (float32(latencyBetweenNodes[nodeIdx[source]][des]) * float32(totalPods))
+						// bonalib.Log("Traffic is not serve in right region", cost)
+						// bonalib.Log("source", source)
+						// bonalib.Log("des", NODENAMES[des])
+						// bonalib.Log("latencyBetweenNodes", latencyBetweenNodes[nodeIdx[source]][des])
+						// bonalib.Log("weightMatrix[nodeIdx[source]][des]", weightMatrix[nodeIdx[source]][des])
 					}
 				}
 			}
 			o.communicationCost = float64(cost)
-			// bonalib.Log("latencyBetweenNodes", latencyBetweenNodes)
-			// bonalib.Log("weightMatrix", weightMatrix)
-			// bonalib.Log("cus", cus)
 			bonalib.Log("CommunicationCost", o.communicationCost)
+
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
-
-			// bonalib.Log("KPA cus", o.KPACus)
-
 		}
 	}
 }
 
-func (o *OkasanScheduler) algorithm(kodomo *KodomoScheduler, deltaDesiredPods map[string]int32) map[string]int32 {
+func (o *OkasanScheduler) algorithm(kodomo *KodomoScheduler, currentDesiredPods map[string]int32, deltaDesiredPods map[string]int32) map[string]int32 {
+	// Calculate current total pods
+	currentTotalPods := int32(0)
+	for _, node := range NODENAMES {
+		currentTotalPods += currentDesiredPods[node]
+	}
+
+	// Modify [deltaDesiredPods] with algorith
 	for _, node := range NODENAMES {
 		if deltaDesiredPods[node] <= 0 {
+			currentTotalPods += deltaDesiredPods[node]
 			continue
 		}
 		if deltaDesiredPods[node] > 0 {
@@ -517,24 +522,35 @@ func (o *OkasanScheduler) algorithm(kodomo *KodomoScheduler, deltaDesiredPods ma
 					}
 				}
 			}
-			bonalib.Log("Bonus Communication Cost", bonusCommunicationCost)
+			// bonalib.Log("Bonus Communication Cost", bonusCommunicationCost)
 
 			// CALCULATE NEW SWITCHING COST
 			coldStartTime := calculateAverage(o.coldStartTime[kodomo.Name][node])
-			// bonusSwitchingCost := coldStartTime * float64(deltaDesiredPods[node])
 			// bonalib.Log("Bonus Switching Cost", bonusSwitchingCost)
 
 			// Calculate minimum total number of pods
+			totalCus := int32(0)
+			for _, node := range NODENAMES {
+				totalCus += o.KPACus[kodomo.Name][node]
+			}
+			minPods := ceilDivide(int(totalCus), kodomo.AuTarget)
+			bonalib.Log("minPods", minPods)
 
 			// DECIDE TO CREATE NEW POD
 			for currentPods := deltaDesiredPods[node]; currentPods != 0; {
 				bonusSwitchingCost := coldStartTime * float64(deltaDesiredPods[node])
+				bonalib.Log("bonusSwitchingCost", bonusSwitchingCost)
 
 				// Decide whether to create new pod or not
-				if bonusSwitchingCost > bonusCommunicationCost {
+				if bonusSwitchingCost > bonusCommunicationCost+o.communicationCost {
+					if currentTotalPods <= int32(minPods) {
+						bonalib.Log("Exceed min pod", currentTotalPods)
+						break
+					}
 					currentPods--
 					deltaDesiredPods[node]--
 				} else {
+					currentTotalPods += currentPods
 					break
 				}
 			}
