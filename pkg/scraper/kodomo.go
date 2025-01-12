@@ -212,7 +212,7 @@ func (k *KodomoScraper) scrapePodOnNode() {
 
 	// Count all pods with status "Running" on each node and extract the data to [Kodomo.podOnNode]
 	for _, pod := range pods.Items {
-		if pod.Status.Phase != "Terminating" && pod.Status.Phase != "Pending" && strings.Contains(pod.Name, "hello") {
+		if pod.Status.Phase != "Terminating" && pod.Status.Phase != "Pending" && strings.Contains(pod.Name, k.Name) {
 			podOnNode[pod.Spec.NodeName]++
 		}
 	}

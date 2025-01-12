@@ -85,6 +85,7 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 		select {
 		case <-k.ScheduleStop.Kodomo:
 			bonalib.Log("STOP SCRAPE POD AUTOSCALING", k.Name)
+			time.Sleep(time.Duration(k.sleepTime) * time.Second)
 			return
 		default:
 			// RETRIEVE VALUE FROM OKASAN STRUCT

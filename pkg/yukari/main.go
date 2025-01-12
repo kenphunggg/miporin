@@ -9,7 +9,7 @@ var (
 	NODENAMES         = miporin.GetNodenames()
 	CLIENTSET         = miporin.GetClientSet()
 	DYNCLIENT         = miporin.GetDynamicClient()
-	MAXPON            = []int{10, 10, 3} // Maximum pod on node
+	MAXPON            = []int{2, 2, 1} // Maximum pod on node // fix later
 	OKASAN_SCRAPERS   = map[string]*scraper.OkasanScraper{}
 	OKASAN_SCHEDULERS = map[string]*OkasanScheduler{}
 )

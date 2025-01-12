@@ -263,7 +263,7 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			// o.algorithm(currentDesiredPods, kodomo)
 
 			// bonalib.Log("updatedCurrentDesiredPods", o.Name, currentDesiredPods)
-			o.patchSchedule(currentDesiredPods)
+			o.patchSchedule(kodomo, currentDesiredPods)
 			// o.testSeika(currentDesiredPods)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
@@ -338,13 +338,17 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 						currentPods++
 					}
 					if currentPods > 0 {
+						if currentDesiredPods[node] >= int32(MAXPON[nodeidx[node]]) {
+							continue
+						}
 						currentDesiredPods[node]++
 						currentPods--
 					}
 				}
 			}
+			// currentDesiredPods["cloud-node"] = 1
 
-			o.patchSchedule(currentDesiredPods)
+			o.patchSchedule(kodomo, currentDesiredPods)
 
 			// bonalib.Log("deltaDesiredPods", deltaDesiredPods)
 			bonalib.Log("currentDesiredPods", currentDesiredPods)
@@ -457,7 +461,9 @@ func (o *OkasanScheduler) getColdStartTime() {
 func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 	for {
 		select {
-		case <-kodomo.ScheduleStop.Kodomo:
+		case <-kodomo.ScheduleStop.Okasan:
+			bonalib.Log("STOP")
+			time.Sleep(time.Duration(o.sleepTime*2) * time.Second)
 			return
 		default:
 			latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
@@ -562,7 +568,7 @@ func (o *OkasanScheduler) algorithm(kodomo *KodomoScheduler, currentDesiredPods 
 
 // ------<>------END EXTENSION------<>------
 
-func (o *OkasanScheduler) patchSchedule(desiredPods map[string]int32) {
+func (o *OkasanScheduler) patchSchedule(kodomo *KodomoScheduler, desiredPods map[string]int32) {
 	gvr := schema.GroupVersionResource{
 		Group:    "batch.bonavadeur.io",
 		Version:  "v1",
@@ -590,7 +596,7 @@ func (o *OkasanScheduler) patchSchedule(desiredPods map[string]int32) {
 
 	// Namespace and resource name
 	namespace := "default"
-	resourceName := "hello"
+	resourceName := kodomo.Name
 
 	// Execute the patch request
 	patchedResource, err := DYNCLIENT.Resource(gvr).
@@ -658,6 +664,7 @@ func (o *OkasanScheduler) addKodomo(kodomo *KodomoScheduler) {
 func (o *OkasanScheduler) deleteKodomo(kodomo string) {
 	o.Kodomo[kodomo].ScheduleStop.Stop()
 	o.Kodomo[kodomo] = nil
+	time.Sleep(time.Duration(o.sleepTime) * time.Second)
 	delete(o.Kodomo, kodomo)
 }
 
