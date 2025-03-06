@@ -347,6 +347,8 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 				}
 			}
 			// currentDesiredPods["cloud-node"] = 1
+			// currentDesiredPods["master-node"] = 1
+			// currentDesiredPods["edge-node"] = 1
 
 			o.patchSchedule(kodomo, currentDesiredPods)
 
