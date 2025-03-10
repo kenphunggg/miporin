@@ -71,5 +71,19 @@ func server() {
 		return c.JSON(http.StatusOK, miporin.GetPodsCIDRs())
 	})
 
+	e.GET("/api/state/okasan/:okasan/kodomo/:kodomo/cold", func(c echo.Context) error {
+		okasanScheduler, ok := OKASAN_SCHEDULERS[c.Param("okasan")]
+		if ok {
+			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
+			if ok {
+				return c.JSON(http.StatusOK, kodomoScheduler.KodomoState)
+			} else {
+				return c.JSON(http.StatusNotFound, "NotFound")
+			}
+		} else {
+			return c.JSON(http.StatusNotFound, "NotFound")
+		}
+	})
+
 	e.Logger.Fatal(e.Start(":18080"))
 }

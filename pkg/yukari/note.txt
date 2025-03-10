@@ -1,0 +1,1 @@
+I. Remove all image in crictl and grep the image

@@ -167,6 +167,7 @@ func (o *OkasanScraper) addKodomo(kodomo *KodomoScraper) {
 }
 
 func (o *OkasanScraper) deleteKodomo(kodomo string) {
+	time.Sleep(time.Duration(o.sleepTime) * time.Second)
 	o.Kodomo[kodomo].ScrapeStop.Stop()
 	o.Kodomo[kodomo] = nil
 	delete(o.Kodomo, kodomo)

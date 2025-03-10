@@ -7,7 +7,6 @@ import (
 	"log"
 	"math"
 	"net/http"
-	"reflect"
 	"time"
 
 	"github.com/bonavadeur/miporin/pkg/bonalib"
@@ -54,7 +53,7 @@ func NewOkasanScheduler(
 
 	go atarashiiOkasanScheduler.watchKsvcCreateEvent()
 
-	go atarashiiOkasanScheduler.getColdStartTime()
+	// go atarashiiOkasanScheduler.getColdStartTime()
 
 	go atarashiiOkasanScheduler.getKsvcList()
 
@@ -82,6 +81,11 @@ func (o *OkasanScheduler) init() {
 		child := NewKodomoScheduler(ksvcName, o.sleepTime)
 		o.addKodomo(child)
 	}
+
+	// var scheme = runtime.NewScheme()
+	// var codecs = serializer.NewCodecFactory(scheme)
+
+	// servingv1.AddToScheme(scheme)
 
 }
 
@@ -176,116 +180,6 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 		noChanges[nodename] = 0
 	}
 	firstTime := true
-	var minResponseTime, minIdx int32
-
-	// Convert nodename into number
-	nodeidx := map[string]int{}
-	for i, nodename := range NODENAMES {
-		nodeidx[nodename] = i
-	}
-
-	for {
-		select {
-		case <-kodomo.ScheduleStop.Okasan:
-			return
-		default:
-			// [KodomoScheduler.Decision] equal [Okasan.KPADecision] which is scrapped from [Knative Autoscaler]
-			// It will return the number of pod required on each node
-			decideInNode = kodomo.Decision
-
-			// Initial number of pod on each node
-			if firstTime {
-				currentDesiredPods = decideInNode
-				firstTime = false
-			} else {
-				newDesiredPods = decideInNode
-			}
-
-			// Calculate the differences on number of pods on each node
-			for k_cdp := range currentDesiredPods {
-				deltaDesiredPods[k_cdp] = newDesiredPods[k_cdp] - currentDesiredPods[k_cdp]
-			}
-			for _, v_dpp := range deltaDesiredPods {
-				if v_dpp != 0 { // if have any change in delta, break and go to following steps
-					break
-				}
-			}
-
-			if reflect.DeepEqual(deltaDesiredPods, noChanges) { // if no change, sleep and continue
-				time.Sleep(time.Duration(o.sleepTime) * time.Second)
-				continue
-			}
-
-			// k_ddp: nodename
-			// v_dpp: number of pod needed
-			for k_ddp, v_ddp := range deltaDesiredPods { // Check for every node that have the change in number of pod
-				for i := v_ddp; i != 0; {
-					if i < 0 { // If number of pod on that node decrease
-						currentDesiredPods[k_ddp]-- // Decrease the [currentDesiredPods] by 1
-						i++                         // Continue decrease until reach 0
-					}
-					if i > 0 { // If number of pod on that node increase
-						minResponseTime = int32(1000000) // Set min response time to extreme high
-						minIdx = -1                      // Set min index to -1
-
-						// Get response time for traffic from node i to node j
-						// It is the matric like this
-						// Respt [i][j]int32
-						responseTime := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Metrics.Respt
-
-						// nodeidx[k_ddp]: convert nodename into number
-						// responseTime[nodeidx[k_ddp]]: response time for traffic from node [k_ddp]
-						// loop each row of RESPONSETIME - loop for the response time of trafficfrom node [k_ddp] to all nodes
-						for i_rpt := range responseTime[nodeidx[k_ddp]] {
-							// If [currentDesiredPods] in node [k_ddp] is not fewer than max pod in node [k_ddp]
-							// MAXPOD is set to []int{10, 10, 3} [in yukari/main.go]
-							if currentDesiredPods[k_ddp] >= int32(MAXPON[nodeidx[k_ddp]]) {
-								continue
-							} else {
-								// If response time from [k_ddp] to [i_rpt] lower than minimum response time
-								// This will always true cause minResponseTime is set to 1000000
-								if responseTime[nodeidx[k_ddp]][i_rpt] < minResponseTime {
-									minResponseTime = responseTime[nodeidx[k_ddp]][i_rpt] // Update minResponseTime
-									minIdx = int32(i_rpt)                                 // it is served on node [i_rpt]
-								}
-							}
-						}
-						// This ensure that the system will not scale pod reach out of maximimum pod in node that have been set
-						if minIdx != -1 {
-							currentDesiredPods[NODENAMES[minIdx]]++ // Update current desired pod
-						}
-						i--
-					}
-				}
-			}
-
-			bonalib.Log("currentDesiredPods", o.Name, currentDesiredPods)
-			// o.algorithm(currentDesiredPods, kodomo)
-
-			// bonalib.Log("updatedCurrentDesiredPods", o.Name, currentDesiredPods)
-			o.patchSchedule(kodomo, currentDesiredPods)
-			// o.testSeika(currentDesiredPods)
-
-			time.Sleep(time.Duration(o.sleepTime) * time.Second)
-		}
-	}
-}
-
-func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
-	decideInNode := map[string]int32{}
-	currentDesiredPods := map[string]int32{}
-	newDesiredPods := map[string]int32{}
-	deltaDesiredPods := map[string]int32{}
-	noChanges := map[string]int32{} // noChanges is a const, equal [0, 0, 0]
-
-	// Initial value for all node in cluster
-	for _, nodename := range NODENAMES {
-		currentDesiredPods[nodename] = 0
-		newDesiredPods[nodename] = 0
-		deltaDesiredPods[nodename] = 0
-		noChanges[nodename] = 0
-	}
-	firstTime := true
 	// var minResponseTime, minIdx int32
 
 	// Convert nodename into number
@@ -299,8 +193,14 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 	for {
 		select {
 		case <-kodomo.ScheduleStop.Okasan:
+			// bonalib.Log("Schedule stop")
 			return
 		default:
+			if o.Kodomo[kodomo.Name] == nil {
+				// bonalib.Log("kodomo nil")
+				return
+			}
+			// bonalib.Log("kodomo", kodomo)
 			// [KodomoScheduler.Decision] equal [Okasan.KPADecision] which is scrapped from [Knative Autoscaler]
 			// It will return the number of pod required on each node
 			decideInNode = kodomo.Decision
@@ -323,13 +223,20 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 				}
 			}
 
-			if reflect.DeepEqual(deltaDesiredPods, noChanges) { // if no change, sleep and continue
+			// if no change, sleep and continue
+			// if reflect.DeepEqual(deltaDesiredPods, noChanges) {
+			// 	time.Sleep(time.Duration(o.sleepTime) * time.Second)
+			// 	continue
+			// }
+
+			// State algorithm
+			if !containSeika(kodomo.Name) {
+				bonalib.Log("seika", kodomo.Name, " CONFIRMED deleted")
 				time.Sleep(time.Duration(o.sleepTime) * time.Second)
 				continue
 			}
-
-			// Cross-Edge algorithm
-			o.algorithm(kodomo, currentDesiredPods, deltaDesiredPods)
+			o.StateSchedule(kodomo)
+			// o.algorithmCrossEdge(kodomo, currentDesiredPods, deltaDesiredPods)
 
 			for node, pods := range deltaDesiredPods {
 				for currentPods := pods; currentPods != 0; {
@@ -353,7 +260,7 @@ func (o *OkasanScheduler) newSchedule(kodomo *KodomoScheduler) {
 			o.patchSchedule(kodomo, currentDesiredPods)
 
 			// bonalib.Log("deltaDesiredPods", deltaDesiredPods)
-			bonalib.Log("currentDesiredPods", currentDesiredPods)
+			// bonalib.Log("currentDesiredPods", currentDesiredPods)
 
 			time.Sleep(time.Duration(o.sleepTime) * time.Second)
 
@@ -459,16 +366,20 @@ func (o *OkasanScheduler) getColdStartTime() {
 	}
 }
 
-// Get total cost caused by latency between nodes
+// // Get total cost caused by latency between nodes
 func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 	for {
 		select {
-		case <-kodomo.ScheduleStop.Okasan:
-			bonalib.Log("STOP")
-			time.Sleep(time.Duration(o.sleepTime*2) * time.Second)
+		case <-kodomo.ScheduleStop.Kodomo:
+			bonalib.Log("STOP GET COMMUNICATION COST")
+			time.Sleep(time.Duration(o.sleepTime) * time.Second)
 			return
 		default:
 			latencyBetweenNodes := OKASAN_SCRAPERS[o.Name].Latency
+			if OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name] == nil {
+				bonalib.Log("STOP GET COMMUNICATION COST")
+				time.Sleep(time.Duration(o.sleepTime) * time.Second)
+			}
 			weightMatrix := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Weight
 			cus := o.KPACus[kodomo.Name]
 			if latencyBetweenNodes == nil || weightMatrix == nil || cus == nil {
@@ -504,7 +415,10 @@ func (o *OkasanScheduler) getCommunicationCost(kodomo *KodomoScheduler) {
 	}
 }
 
-func (o *OkasanScheduler) algorithm(kodomo *KodomoScheduler, currentDesiredPods map[string]int32, deltaDesiredPods map[string]int32) map[string]int32 {
+func (o *OkasanScheduler) algorithmCrossEdge(
+	kodomo *KodomoScheduler,
+	currentDesiredPods map[string]int32,
+	deltaDesiredPods map[string]int32) map[string]int32 {
 	// Calculate current total pods
 	currentTotalPods := int32(0)
 	for _, node := range NODENAMES {
@@ -605,7 +519,7 @@ func (o *OkasanScheduler) patchSchedule(kodomo *KodomoScheduler, desiredPods map
 		Namespace(namespace).
 		Patch(context.TODO(), resourceName, types.MergePatchType, patchBytes, metav1.PatchOptions{})
 	if err != nil {
-		bonalib.Warn("Error patching resource: ", err)
+		bonalib.Log("Error patching resource: ", err)
 	} else {
 		resource, found, _ := unstructured.NestedString(patchedResource.Object, "metadata", "name")
 		if !found {
@@ -658,16 +572,17 @@ func (o *OkasanScheduler) watchKsvcCreateEvent() {
 func (o *OkasanScheduler) addKodomo(kodomo *KodomoScheduler) {
 	kodomo.Okasan = o
 	o.Kodomo[kodomo.Name] = kodomo
-	go o.newSchedule(kodomo)
-	go o.getCommunicationCost(kodomo)
+	// go o.schedule(kodomo)
+	go o.schedule(o.Kodomo[kodomo.Name])
+	// go o.getCommunicationCost(kodomo)
 	// go o.schedule(kodomo)
 }
 
 func (o *OkasanScheduler) deleteKodomo(kodomo string) {
 	o.Kodomo[kodomo].ScheduleStop.Stop()
-	o.Kodomo[kodomo] = nil
 	time.Sleep(time.Duration(o.sleepTime) * time.Second)
 	delete(o.Kodomo, kodomo)
+	// o.Kodomo[kodomo] = nil
 }
 
 func (o *OkasanScheduler) getKsvcList() {

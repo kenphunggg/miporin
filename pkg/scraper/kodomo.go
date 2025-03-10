@@ -85,6 +85,7 @@ func (k *KodomoScraper) scrape() {
 		select {
 		// If it receive a signal from [KodomoScraper], return nothing
 		case <-k.ScrapeStop.Kodomo:
+			time.Sleep(time.Duration(k.sleepTime) * time.Second)
 			return
 		// By default
 		default:

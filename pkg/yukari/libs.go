@@ -3,6 +3,7 @@ package yukari
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/bonavadeur/miporin/pkg/bonalib"
@@ -92,6 +93,36 @@ func deleteSeika(ksvcName string) {
 	} else {
 		bonalib.Info("Deleted Seika instance", ksvcName)
 	}
+}
+
+func getSeika() (seikaList []string) {
+	namespace := "default"
+
+	seikaGVR := schema.GroupVersionResource{
+		Group:    "batch.bonavadeur.io",
+		Version:  "v1",
+		Resource: "seikas",
+	}
+
+	seikas, err := DYNCLIENT.Resource(seikaGVR).Namespace(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		log.Fatalf("Failed to list Seikas: %v", err)
+	}
+
+	for _, seika := range seikas.Items {
+		seikaList = append(seikaList, seika.GetName())
+	}
+
+	return seikaList
+}
+
+func containSeika(ksvcName string) bool {
+	for _, seika := range getSeika() {
+		if ksvcName == seika {
+			return true
+		}
+	}
+	return false
 }
 
 // Function to check if a slice contains a specific value
