@@ -91,8 +91,7 @@ func server() {
 		if ok {
 			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
 			if ok {
-				bonalib.Log("kodomo scheduler", kodomoScheduler)
-				// kodomoScheduler.KodomoStateChan.WarmdiskSig()
+				// bonalib.Log("kodomo scheduler", kodomoScheduler)
 				kodomoScheduler.StateChan.WarmDisk <- true
 				return c.JSON(http.StatusOK, kodomoScheduler.State)
 			} else {
@@ -108,8 +107,7 @@ func server() {
 		if ok {
 			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
 			if ok {
-				bonalib.Log("kodomo scheduler", kodomoScheduler)
-				// kodomoScheduler.KodomoStateChan.WarmdiskSig()
+				// bonalib.Log("kodomo scheduler", kodomoScheduler)
 				kodomoScheduler.StateChan.WarmCPU <- true
 				return c.JSON(http.StatusOK, kodomoScheduler.State)
 			} else {

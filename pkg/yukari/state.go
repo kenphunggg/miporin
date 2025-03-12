@@ -70,33 +70,31 @@ func (o *OkasanScheduler) StateSchedule(kodomo *KodomoScheduler) {
 		}
 		return
 	case <-kodomo.StateChan.WarmDisk: // Service and image available
-		if !kodomo.State.WarmDisk {
-			if kodomo.State.Cold {
-				bonalib.Log("Changing from cold to warm disk")
-				// PULL IMAGE TO DOCKER
-				dockerPull(kodomo)
-				// COPY AND RETAG IMAGE
+		// if !kodomo.State.WarmDisk {
+		if kodomo.State.Cold {
+			bonalib.Log("Changing from Cold to Warm Disk")
+			// PULL IMAGE TO DOCKER
+			// dockerPull(kodomo)
+			// COPY AND RETAG IMAGE
 
-				// SAVE TO TAR FILE
+			// SAVE TO TAR FILE
 
-				// EXPORT TO CRICTL
+			// EXPORT TO CRICTL
 
-				// Test
-				kodomo.State.Cold = false
-				kodomo.State.WarmDisk = true
-				bonalib.Log("Finsish changing from cold to warm disk")
-			}
+			// Test
+			kodomo.State.Cold = false
+			kodomo.State.WarmDisk = true
+			bonalib.Log("Finsish changing from Cold to Warm Disk")
+			// }
 		}
 		// return
 	case <-kodomo.StateChan.WarmCPU: // Container exist, ready to receive request
-		if !kodomo.State.WarmCPU {
-			if kodomo.State.WarmDisk {
-				<-kodomo.StateChan.WarmDisk
-				bonalib.Log("Changing to WarmCPU")
-				kodomo.State.WarmDisk = false
-				kodomo.State.WarmCPU = true
-				bonalib.Log("Finish changing from WarmDisk to WarmCPU")
-			}
+		bonalib.Log("test warmcpu")
+		if kodomo.State.WarmDisk {
+			bonalib.Log("Changing to WarmCPU")
+			kodomo.State.WarmDisk = false
+			kodomo.State.WarmCPU = true
+			bonalib.Log("Finish changing from WarmDisk to WarmCPU")
 		}
 		// return
 	case <-kodomo.StateChan.WarmMemory: // Pause container
@@ -105,6 +103,7 @@ func (o *OkasanScheduler) StateSchedule(kodomo *KodomoScheduler) {
 		return
 	default: // If kodomo first init (Convert from Null to Cold)
 		if kodomo.State.Null { // This "if" will loop over [schedule] until ksvc finish initialize
+			bonalib.Log("Changing from Null to Cold")
 			for { // Loop until finish initilize ksvc
 				pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
 				if err != nil {
@@ -144,6 +143,7 @@ func (o *OkasanScheduler) StateSchedule(kodomo *KodomoScheduler) {
 				// bonalib.Log("imageid", kodomo.imageID)
 				// crictlRmi(kodomo)
 				kodomo.State.Cold = true
+				bonalib.Log("Finish changing from Null to Cold")
 
 			}
 		}
