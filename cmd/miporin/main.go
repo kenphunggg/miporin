@@ -53,7 +53,7 @@ func server() {
 		return c.String(http.StatusOK, "Konnichiwa, Miporin-chan desu\n")
 	})
 
-	e.GET("/api/weight/okasan/:okasan/kodomo/:kodomo", func(c echo.Context) error {
+	e.GET("/api/weight/:okasan/:kodomo", func(c echo.Context) error {
 		okasanScraper, ok := OKASAN_SCRAPERS[c.Param("okasan")]
 		if ok {
 			kodomoScraper, ok := okasanScraper.Kodomo[c.Param("kodomo")]
@@ -71,12 +71,47 @@ func server() {
 		return c.JSON(http.StatusOK, miporin.GetPodsCIDRs())
 	})
 
-	e.GET("/api/state/okasan/:okasan/kodomo/:kodomo/cold", func(c echo.Context) error {
+	e.GET("/api/state/:okasan/:kodomo", func(c echo.Context) error {
+		okasanScheduler, ok := OKASAN_SCHEDULERS[c.Param("okasan")]
+		if ok {
+			bonalib.Log("Logging current state")
+			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
+			if ok {
+				return c.JSON(http.StatusOK, kodomoScheduler.State)
+			} else {
+				return c.JSON(http.StatusNotFound, "NotFound")
+			}
+		} else {
+			return c.JSON(http.StatusNotFound, "NotFound")
+		}
+	})
+
+	e.GET("/api/state/:okasan/:kodomo/warmdisk", func(c echo.Context) error {
 		okasanScheduler, ok := OKASAN_SCHEDULERS[c.Param("okasan")]
 		if ok {
 			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
 			if ok {
-				return c.JSON(http.StatusOK, kodomoScheduler.KodomoState)
+				bonalib.Log("kodomo scheduler", kodomoScheduler)
+				// kodomoScheduler.KodomoStateChan.WarmdiskSig()
+				kodomoScheduler.StateChan.WarmDisk <- true
+				return c.JSON(http.StatusOK, kodomoScheduler.State)
+			} else {
+				return c.JSON(http.StatusNotFound, "NotFound")
+			}
+		} else {
+			return c.JSON(http.StatusNotFound, "NotFound")
+		}
+	})
+
+	e.GET("/api/state/:okasan/:kodomo/warmcpu", func(c echo.Context) error {
+		okasanScheduler, ok := OKASAN_SCHEDULERS[c.Param("okasan")]
+		if ok {
+			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
+			if ok {
+				bonalib.Log("kodomo scheduler", kodomoScheduler)
+				// kodomoScheduler.KodomoStateChan.WarmdiskSig()
+				kodomoScheduler.StateChan.WarmCPU <- true
+				return c.JSON(http.StatusOK, kodomoScheduler.State)
 			} else {
 				return c.JSON(http.StatusNotFound, "NotFound")
 			}

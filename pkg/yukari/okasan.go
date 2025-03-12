@@ -230,11 +230,11 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			// }
 
 			// State algorithm
-			if !containSeika(kodomo.Name) {
-				bonalib.Log("seika", kodomo.Name, " CONFIRMED deleted")
-				time.Sleep(time.Duration(o.sleepTime) * time.Second)
-				continue
-			}
+			// if !containSeika(kodomo.Name) && !kodomo.KodomoState.Cold {
+			// 	// bonalib.Log("seika", kodomo.Name, " CONFIRMED deleted")
+			// 	time.Sleep(time.Duration(o.sleepTime) * time.Second)
+			// 	continue
+			// }
 			o.StateSchedule(kodomo)
 			// o.algorithmCrossEdge(kodomo, currentDesiredPods, deltaDesiredPods)
 
@@ -257,7 +257,7 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			// currentDesiredPods["master-node"] = 1
 			// currentDesiredPods["edge-node"] = 1
 
-			o.patchSchedule(kodomo, currentDesiredPods)
+			// o.patchSchedule(kodomo, currentDesiredPods)
 
 			// bonalib.Log("deltaDesiredPods", deltaDesiredPods)
 			// bonalib.Log("currentDesiredPods", currentDesiredPods)

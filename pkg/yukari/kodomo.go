@@ -14,16 +14,20 @@ import (
 // Each [KodomoScheduler] keep track on each ksvc,
 // If a ksvc want to create new pod, it send info to [KodomoScheduler] to hold the data on [Decision] variable
 type KodomoScheduler struct {
-	Name            string
-	Decision        map[string]int32
-	Cus             map[string]int32
-	window          int32
-	sleepTime       int8
-	Okasan          *OkasanScheduler
-	ScheduleStop    *StopChan
-	AuTarget        int
-	KodomoState     *State
-	KodomoStateChan *StateChan
+	Name         string
+	Decision     map[string]int32
+	Cus          map[string]int32
+	window       int32
+	sleepTime    int8
+	Okasan       *OkasanScheduler
+	ScheduleStop *StopChan
+	AuTarget     int
+	State        *State
+	StateChan    *StateChan
+	StateSignal  *StateSignal
+	image        string
+	imageID      string
+	podList      map[string]*State
 }
 
 type StopChan struct {
@@ -35,12 +39,12 @@ func NewKodomoScheduler(
 	name string, sleepTime int8,
 ) *KodomoScheduler {
 	atarashiiKodomoScheduler := &KodomoScheduler{
-		Name:            name,
-		sleepTime:       sleepTime,
-		Decision:        map[string]int32{},
-		ScheduleStop:    NewStopChan(),
-		KodomoState:     NewState(),
-		KodomoStateChan: NewStateChan(),
+		Name:         name,
+		sleepTime:    sleepTime,
+		Decision:     map[string]int32{},
+		ScheduleStop: NewStopChan(),
+		State:        NewState(),
+		StateChan:    NewStateChan(),
 	}
 
 	// Initialize value for decision on node to 0

@@ -27,6 +27,15 @@ type StateChan struct {
 	Active     chan bool // Receiving request
 }
 
+type StateSignal struct {
+	enableNull       bool
+	enableCold       bool
+	enableWarmDisk   bool
+	enableWarmCPU    bool
+	enableWarmMemory bool
+	enableActive     bool
+}
+
 func NewState() *State {
 	newState := &State{
 		Null:       true,
@@ -53,23 +62,49 @@ func NewStateChan() *StateChan {
 
 func (o *OkasanScheduler) StateSchedule(kodomo *KodomoScheduler) {
 	select {
-	case <-kodomo.KodomoStateChan.Null:
+	case <-kodomo.StateChan.Null:
 		return
-	case <-kodomo.KodomoStateChan.Cold:
-		if kodomo.KodomoState.WarmDisk {
+	case <-kodomo.StateChan.Cold:
+		if kodomo.State.WarmDisk {
 			return
 		}
 		return
-	case <-kodomo.KodomoStateChan.WarmDisk: // Service and image available
+	case <-kodomo.StateChan.WarmDisk: // Service and image available
+		if !kodomo.State.WarmDisk {
+			if kodomo.State.Cold {
+				bonalib.Log("Changing from cold to warm disk")
+				// PULL IMAGE TO DOCKER
+				dockerPull(kodomo)
+				// COPY AND RETAG IMAGE
+
+				// SAVE TO TAR FILE
+
+				// EXPORT TO CRICTL
+
+				// Test
+				kodomo.State.Cold = false
+				kodomo.State.WarmDisk = true
+				bonalib.Log("Finsish changing from cold to warm disk")
+			}
+		}
+		// return
+	case <-kodomo.StateChan.WarmCPU: // Container exist, ready to receive request
+		if !kodomo.State.WarmCPU {
+			if kodomo.State.WarmDisk {
+				<-kodomo.StateChan.WarmDisk
+				bonalib.Log("Changing to WarmCPU")
+				kodomo.State.WarmDisk = false
+				kodomo.State.WarmCPU = true
+				bonalib.Log("Finish changing from WarmDisk to WarmCPU")
+			}
+		}
+		// return
+	case <-kodomo.StateChan.WarmMemory: // Pause container
 		return
-	case <-kodomo.KodomoStateChan.WarmCPU: // Container exist, ready to receive request
-		return
-	case <-kodomo.KodomoStateChan.WarmMemory: // Pause container
-		return
-	case <-kodomo.KodomoStateChan.Active: // Receiving request
+	case <-kodomo.StateChan.Active: // Receiving request
 		return
 	default: // If kodomo first init (Convert from Null to Cold)
-		if kodomo.KodomoState.Null { // This "if" will loop over [schedule] until ksvc finish initialize
+		if kodomo.State.Null { // This "if" will loop over [schedule] until ksvc finish initialize
 			for { // Loop until finish initilize ksvc
 				pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
 				if err != nil {
@@ -96,18 +131,21 @@ func (o *OkasanScheduler) StateSchedule(kodomo *KodomoScheduler) {
 				}
 
 				if !grep {
-					bonalib.Log("FINISH")
-					kodomo.KodomoState.Null = false
+					kodomo.State.Null = false
 					break
 				}
 				time.Sleep(time.Duration(o.sleepTime) * time.Second)
 			}
+			if !kodomo.State.Cold {
+				kodomo.image = grepImage(kodomo.Name)
+				kodomo.imageID = grepImageID(kodomo.Name)
+				// deleteSeika(kodomo.Name)
+				// bonalib.Log("image", kodomo.image)
+				// bonalib.Log("imageid", kodomo.imageID)
+				// crictlRmi(kodomo)
+				kodomo.State.Cold = true
+
+			}
 		}
-		bonalib.Log("Finish initializing ksvc", kodomo.Name)
-
-		deleteSeika(kodomo.Name)
-
-		bonalib.Log("seika", kodomo.Name, "deleted")
-
 	}
 }

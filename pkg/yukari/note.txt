@@ -1,1 +1,28 @@
 I. Remove all image in crictl and grep the image
+
+1. Get image
+ssh master-node "crictl image ls | grep shuka | awk '{print \$1}'"
+Return: 
+docker.io/bonavadeur/shuka
+
+2. Get image ID
+ssh master-node "crictl image ls | grep shuka | awk '{print \$3}'"
+Return: 
+79054189220aa
+
+3. Delete image in crictl
+ssh master-node "crictl rmi 79054189220aa"
+
+4. Pull image to docker
+ssh master-node "docker pull docker.io/bonavadeur/shuka:v1.3"
+
+5. Copy and retag image
+ssh master-node "docker tag docker.io/bonavadeur/shuka:v1.3 kenphung/shuka:newtag"
+
+6. Save to a tar file 
+ssh master-node "docker save -o /tmp/shuka_newtag.tar kenphung/shuka:newtag"
+
+7. Export to crictl
+ssh master-node "ctr -n=k8s.io images import /tmp/shuka_newtag.tar"
+
+
