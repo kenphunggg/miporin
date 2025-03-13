@@ -1,16 +1,13 @@
 package yukari
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
-	"github.com/bonavadeur/miporin/pkg/bonalib"
 	"golang.org/x/crypto/ssh"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -117,53 +114,53 @@ func grepImage(ksvcName string) string {
 	return image
 }
 
-func crictlRmi(kodmo *KodomoScheduler) {
-	for _, node := range NODENAMES {
-		// Define the remote command
-		remoteCommand := "crictl rmi " + kodmo.imageID
+// func crictlRmi(kodmo *KodomoScheduler) {
+// 	for _, node := range NODENAMES {
+// 		// Define the remote command
+// 		remoteCommand := "crictl rmi " + kodmo.imageID
 
-		// Use the `ssh` command with the hostname from your SSH config file
-		sshCommand := exec.Command("ssh", node, remoteCommand)
+// 		// Use the `ssh` command with the hostname from your SSH config file
+// 		sshCommand := exec.Command("ssh", node, remoteCommand)
 
-		// Capture stdout and stderr
-		var stdout, stderr bytes.Buffer
-		sshCommand.Stdout = &stdout
-		sshCommand.Stderr = &stderr
+// 		// Capture stdout and stderr
+// 		var stdout, stderr bytes.Buffer
+// 		sshCommand.Stdout = &stdout
+// 		sshCommand.Stderr = &stderr
 
-		// Run the command
-		if err := sshCommand.Run(); err != nil {
-			fmt.Printf("Error executing SSH command: %v\n", err)
-			fmt.Printf("Stderr: %s\n", stderr.String())
-		}
+// 		// Run the command
+// 		if err := sshCommand.Run(); err != nil {
+// 			fmt.Printf("Error executing SSH command: %v\n", err)
+// 			fmt.Printf("Stderr: %s\n", stderr.String())
+// 		}
 
-		// Print the output
-		fmt.Println("Command output:", stdout.String())
-	}
+// 		// Print the output
+// 		fmt.Println("Command output:", stdout.String())
+// 	}
 
-}
+// }
 
-func dockerPull(kodomo *KodomoScheduler) {
-	for _, node := range NODENAMES {
-		// Define the SSH command and the remote Docker pull command
-		remoteCommand := "docker pull " + kodomo.image
-		sshCommand := exec.Command("ssh", node, remoteCommand)
+// func dockerPull(kodomo *KodomoScheduler) {
+// 	for _, node := range NODENAMES {
+// 		// Define the SSH command and the remote Docker pull command
+// 		remoteCommand := "docker pull " + kodomo.image
+// 		sshCommand := exec.Command("ssh", node, remoteCommand)
 
-		// Capture stdout and stderr for debugging and logging
-		var stdout, stderr bytes.Buffer
-		sshCommand.Stdout = &stdout
-		sshCommand.Stderr = &stderr
+// 		// Capture stdout and stderr for debugging and logging
+// 		var stdout, stderr bytes.Buffer
+// 		sshCommand.Stdout = &stdout
+// 		sshCommand.Stderr = &stderr
 
-		bonalib.Log("Pulling image for node:", node)
+// 		bonalib.Log("Pulling image for node:", node)
 
-		// Execute the SSH command
-		err := sshCommand.Run()
-		if err != nil {
-			bonalib.Warn("Cannot pull image on node:", node)
-			fmt.Printf("Error executing SSH command: %v\n", err)
-			fmt.Printf("Stderr: %s\n", stderr.String())
-		}
+// 		// Execute the SSH command
+// 		err := sshCommand.Run()
+// 		if err != nil {
+// 			bonalib.Warn("Cannot pull image on node:", node)
+// 			fmt.Printf("Error executing SSH command: %v\n", err)
+// 			fmt.Printf("Stderr: %s\n", stderr.String())
+// 		}
 
-		// Print the output of the command
-		fmt.Println("Command output:", stdout.String())
-	}
-}
+// 		// Print the output of the command
+// 		fmt.Println("Command output:", stdout.String())
+// 	}
+// }

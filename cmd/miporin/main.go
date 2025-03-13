@@ -49,10 +49,13 @@ func main() {
 
 func server() {
 	e := echo.New()
+
+	// MIPORIN API
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Konnichiwa, Miporin-chan desu\n")
 	})
 
+	// GET MIPORIN WEIGHT MATRIX
 	e.GET("/api/weight/:okasan/:kodomo", func(c echo.Context) error {
 		okasanScraper, ok := OKASAN_SCRAPERS[c.Param("okasan")]
 		if ok {
@@ -67,53 +70,67 @@ func server() {
 		}
 	})
 
+	// GET PODCIDR
 	e.GET("/api/podcidr", func(c echo.Context) error {
 		return c.JSON(http.StatusOK, miporin.GetPodsCIDRs())
 	})
 
-	e.GET("/api/state/:okasan/:kodomo", func(c echo.Context) error {
+	// API TO CHANGE POD TO [WARMDISK] STATE
+	e.GET("/api/state/:okasan/:kodomo/warmdisk/podname/:name", func(c echo.Context) error {
 		okasanScheduler, ok := OKASAN_SCHEDULERS[c.Param("okasan")]
 		if ok {
-			bonalib.Log("Logging current state")
 			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
 			if ok {
-				return c.JSON(http.StatusOK, kodomoScheduler.State)
+				bonalib.Info("Logging current state for pod in ksvc", kodomoScheduler.Name)
+				dup := false
+				for podstate_name, _ := range kodomoScheduler.PodState {
+					if c.Param("name") == podstate_name {
+						bonalib.Warn("Podstate", podstate_name, "have been created")
+						dup = true
+					}
+				}
+				if !dup {
+					newStatePod := yukari.NewPodState(c.Param("name"), kodomoScheduler.SleepTime) //Create new instance of statepod
+					newStatePod.Kodomo = kodomoScheduler                                          // Link that instance to kodomo
+					kodomoScheduler.PodState[newStatePod.Name] = newStatePod                      // Link Kodomo to that instance
+					newStatePod.StateChan.WarmDisk <- true
+					bonalib.Log("Statepod", kodomoScheduler.PodState[c.Param("name")].Name, "created!")
+				}
+				return c.JSON(http.StatusOK, kodomoScheduler.PodState[c.Param("name")])
 			} else {
+				bonalib.Warn("Ksvc", kodomoScheduler.Name, "not found")
 				return c.JSON(http.StatusNotFound, "NotFound")
 			}
 		} else {
+			bonalib.Warn("Okasan", okasanScheduler.Name, "not found")
 			return c.JSON(http.StatusNotFound, "NotFound")
 		}
 	})
 
-	e.GET("/api/state/:okasan/:kodomo/warmdisk", func(c echo.Context) error {
+	// API TO CHANGE POD TO [WARMCPU] STATE
+	e.GET("/api/state/:okasan/:kodomo/warmcpu/podname/:name/node/:nodename", func(c echo.Context) error {
 		okasanScheduler, ok := OKASAN_SCHEDULERS[c.Param("okasan")]
 		if ok {
 			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
 			if ok {
-				// bonalib.Log("kodomo scheduler", kodomoScheduler)
-				kodomoScheduler.StateChan.WarmDisk <- true
-				return c.JSON(http.StatusOK, kodomoScheduler.State)
+				podstate, ok := kodomoScheduler.PodState[c.Param("name")]
+				if ok {
+					bonalib.Info("Logging current state for pod", c.Param("name"), "in ksvc", kodomoScheduler.Name)
+					podstate.NodeName = c.Param("nodename")
+					bonalib.Log(podstate.Name, "podname", podstate.NodeName, "nodename")
+					podstate.StateChan.WarmCPU <- true
+					bonalib.Log("TEST")
+					return c.JSON(http.StatusOK, podstate.State)
+				} else {
+					bonalib.Warn("Pod", podstate.Name, "in ksvc", kodomoScheduler.Name, "not found")
+					return c.JSON(http.StatusNotFound, "NotFound")
+				}
 			} else {
+				bonalib.Warn("Ksvc", kodomoScheduler.Name, "not found")
 				return c.JSON(http.StatusNotFound, "NotFound")
 			}
 		} else {
-			return c.JSON(http.StatusNotFound, "NotFound")
-		}
-	})
-
-	e.GET("/api/state/:okasan/:kodomo/warmcpu", func(c echo.Context) error {
-		okasanScheduler, ok := OKASAN_SCHEDULERS[c.Param("okasan")]
-		if ok {
-			kodomoScheduler, ok := okasanScheduler.Kodomo[c.Param("kodomo")]
-			if ok {
-				// bonalib.Log("kodomo scheduler", kodomoScheduler)
-				kodomoScheduler.StateChan.WarmCPU <- true
-				return c.JSON(http.StatusOK, kodomoScheduler.State)
-			} else {
-				return c.JSON(http.StatusNotFound, "NotFound")
-			}
-		} else {
+			bonalib.Warn("Okasan", okasanScheduler.Name, "not found")
 			return c.JSON(http.StatusNotFound, "NotFound")
 		}
 	})

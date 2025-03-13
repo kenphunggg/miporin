@@ -18,16 +18,12 @@ type KodomoScheduler struct {
 	Decision     map[string]int32
 	Cus          map[string]int32
 	window       int32
-	sleepTime    int8
+	SleepTime    int8
 	Okasan       *OkasanScheduler
 	ScheduleStop *StopChan
 	AuTarget     int
-	State        *State
-	StateChan    *StateChan
-	StateSignal  *StateSignal
-	image        string
-	imageID      string
-	podList      map[string]*State
+	PodState     map[string]*PodState
+	PodStateMap  map[string]int32
 }
 
 type StopChan struct {
@@ -40,11 +36,10 @@ func NewKodomoScheduler(
 ) *KodomoScheduler {
 	atarashiiKodomoScheduler := &KodomoScheduler{
 		Name:         name,
-		sleepTime:    sleepTime,
+		SleepTime:    sleepTime,
 		Decision:     map[string]int32{},
 		ScheduleStop: NewStopChan(),
-		State:        NewState(),
-		StateChan:    NewStateChan(),
+		PodState:     map[string]*PodState{},
 	}
 
 	// Initialize value for decision on node to 0
@@ -54,6 +49,11 @@ func NewKodomoScheduler(
 
 	auTarget, _ := autoscalingTarget(atarashiiKodomoScheduler)
 	atarashiiKodomoScheduler.AuTarget = bonalib.Str2Int(auTarget)
+
+	atarashiiKodomoScheduler.PodStateMap = make(map[string]int32)
+	for _, nodename := range NODENAMES {
+		atarashiiKodomoScheduler.PodStateMap[nodename] = 0
+	}
 
 	go atarashiiKodomoScheduler.schedule()
 
@@ -79,12 +79,25 @@ func (k *KodomoScheduler) schedule() {
 	for {
 		select {
 		case <-k.ScheduleStop.Kodomo:
-			time.Sleep(time.Duration(k.sleepTime) * time.Second)
+			time.Sleep(time.Duration(k.SleepTime) * time.Second)
 			return
 		default:
 			// k.Decision = k.Okasan.KPADecision[k.Name]
 			k.Cus = k.Okasan.KPACus[k.Name]
-			time.Sleep(time.Duration(k.sleepTime) * time.Second)
+
+			// Map holding total of pod needed on each pod
+			podmap := make(map[string]int32)
+			for _, nodename := range NODENAMES {
+				podmap[nodename] = 0
+			}
+			for _, podstate := range k.PodState {
+				if podstate.State.WarmCPU {
+					podmap[podstate.NodeName]++
+				}
+			}
+			k.PodStateMap = podmap
+
+			time.Sleep(time.Duration(k.SleepTime) * time.Second)
 		}
 	}
 }
@@ -94,26 +107,26 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 		select {
 		case <-k.ScheduleStop.Okasan:
 			// bonalib.Log("STOP SCRAPE POD AUTOSCALING", k.Name)
-			time.Sleep(time.Duration(k.sleepTime) * time.Second)
+			time.Sleep(time.Duration(k.SleepTime) * time.Second)
 			return
 		default:
 			if k == nil {
 				// bonalib.Log("No kodomo found")
 				return
 			} else {
-				time.Sleep(time.Duration(k.sleepTime) * time.Second)
+				time.Sleep(time.Duration(k.SleepTime) * time.Second)
 
 				if OKASAN_SCRAPERS["okaasan"].Kodomo[k.Name] == nil ||
 					OKASAN_SCRAPERS["okaasan"].Kodomo[k.Name].Metrics == nil {
 					// bonalib.Log("Metric nil")
-					time.Sleep(time.Duration(k.sleepTime) * time.Second)
+					time.Sleep(time.Duration(k.SleepTime) * time.Second)
 					return
 				} else {
 					kodomoRespt := OKASAN_SCRAPERS[k.Okasan.Name].Kodomo[k.Name].Metrics.Respt
 					kodomoKPAcus := k.Cus
 
 					if kodomoKPAcus == nil || kodomoRespt == nil {
-						time.Sleep(time.Duration(k.sleepTime) * time.Second)
+						time.Sleep(time.Duration(k.SleepTime) * time.Second)
 						continue
 					}
 
@@ -169,7 +182,7 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 					target, _ := autoscalingTarget(k)
 					if target == "" {
 						bonalib.Log("NOT FOUND KODOMO", k.Name)
-						time.Sleep(time.Duration(k.sleepTime) * time.Second)
+						time.Sleep(time.Duration(k.SleepTime) * time.Second)
 						continue
 					}
 					kn_au_target := bonalib.Str2Int(target)
@@ -217,14 +230,11 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 					k.Decision = desiredPods
 
 					// bonalib.Log("k.Decision", k.Decision)
-
 				}
-
 			}
 			// RETRIEVE VALUE FROM OKASAN STRUCT
 			// [o.Name] is OkasanScheduler.Name which is okaasan
 			// kodomoRespt := OKASAN_SCRAPERS[o.Name].Kodomo[kodomo.Name].Metrics.Respt
-
 		}
 	}
 
@@ -234,7 +244,7 @@ func autoscalingTarget(kodomo *KodomoScheduler) (string, error) {
 	select {
 	case <-kodomo.ScheduleStop.Okasan:
 		// bonalib.Log("STOP GET AUTOSCALING TARGET ANNOTAION")
-		time.Sleep(time.Duration(kodomo.sleepTime) * time.Second)
+		time.Sleep(time.Duration(kodomo.SleepTime) * time.Second)
 		return "KodomoStopped", nil
 	default:
 		ksvcGVR := schema.GroupVersionResource{
@@ -270,4 +280,18 @@ func autoscalingTarget(kodomo *KodomoScheduler) (string, error) {
 		return target, nil
 	}
 
+}
+
+func (k *KodomoScheduler) SchedulePodState(podstate *PodState) {
+
+}
+
+func (k *KodomoScheduler) AddPodState(podstate *PodState) {
+	podstate.Kodomo = k
+	k.PodState[podstate.Name] = podstate
+	// go k.SchedulePodState(k.PodState[podstate.Name])
+}
+
+func (k *KodomoScheduler) deletePodState(podstate *PodState) {
+	return
 }
