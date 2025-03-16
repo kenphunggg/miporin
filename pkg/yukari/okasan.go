@@ -161,7 +161,7 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 			// [KodomoScheduler.Decision] equal [Okasan.KPADecision] which is scrapped from [Knative Autoscaler]
 			// It will return the number of pod required on each node
 			// decideInNode = kodomo.Decision
-			decideInNode = kodomo.PodStateMap
+			decideInNode = kodomo.PodMonitorMap
 
 			// Initial number of pod on each node
 			if firstTime {

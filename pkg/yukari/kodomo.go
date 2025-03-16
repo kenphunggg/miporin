@@ -14,16 +14,16 @@ import (
 // Each [KodomoScheduler] keep track on each ksvc,
 // If a ksvc want to create new pod, it send info to [KodomoScheduler] to hold the data on [Decision] variable
 type KodomoScheduler struct {
-	Name         string
-	Decision     map[string]int32
-	Cus          map[string]int32
-	window       int32
-	SleepTime    int8
-	Okasan       *OkasanScheduler
-	ScheduleStop *StopChan
-	AuTarget     int
-	PodState     map[string]*PodState
-	PodStateMap  map[string]int32
+	Name          string
+	Decision      map[string]int32
+	Cus           map[string]int32
+	window        int32
+	SleepTime     int8
+	Okasan        *OkasanScheduler
+	ScheduleStop  *StopChan
+	AuTarget      int
+	PodMonitor    map[string]*PodMonitor
+	PodMonitorMap map[string]int32
 }
 
 type StopChan struct {
@@ -39,7 +39,7 @@ func NewKodomoScheduler(
 		SleepTime:    sleepTime,
 		Decision:     map[string]int32{},
 		ScheduleStop: NewStopChan(),
-		PodState:     map[string]*PodState{},
+		PodMonitor:   map[string]*PodMonitor{},
 	}
 
 	// Initialize value for decision on node to 0
@@ -50,9 +50,9 @@ func NewKodomoScheduler(
 	auTarget, _ := autoscalingTarget(atarashiiKodomoScheduler)
 	atarashiiKodomoScheduler.AuTarget = bonalib.Str2Int(auTarget)
 
-	atarashiiKodomoScheduler.PodStateMap = make(map[string]int32)
+	atarashiiKodomoScheduler.PodMonitorMap = make(map[string]int32)
 	for _, nodename := range NODENAMES {
-		atarashiiKodomoScheduler.PodStateMap[nodename] = 0
+		atarashiiKodomoScheduler.PodMonitorMap[nodename] = 0
 	}
 
 	go atarashiiKodomoScheduler.schedule()
@@ -90,12 +90,12 @@ func (k *KodomoScheduler) schedule() {
 			for _, nodename := range NODENAMES {
 				podmap[nodename] = 0
 			}
-			for _, podstate := range k.PodState {
+			for _, podstate := range k.PodMonitor {
 				if podstate.State.WarmCPU {
 					podmap[podstate.NodeName]++
 				}
 			}
-			k.PodStateMap = podmap
+			k.PodMonitorMap = podmap
 
 			time.Sleep(time.Duration(k.SleepTime) * time.Second)
 		}
@@ -282,16 +282,75 @@ func autoscalingTarget(kodomo *KodomoScheduler) (string, error) {
 
 }
 
-func (k *KodomoScheduler) SchedulePodState(podstate *PodState) {
+func SchedulePodState(podstate *PodMonitor) {
+	for {
+		select {
+		case <-podstate.StateChan.WarmDisk: // Service and image available
+			// if !kodomo.State.WarmDisk {
+			if podstate.State.Cold {
+				bonalib.Log("Changing from Cold to Warm Disk")
+				// PULL IMAGE TO DOCKER
+				// dockerPull(kodomo)
+				podstate.State.Cold = false
+				podstate.State.WarmDisk = true
+				bonalib.Log("Finsish changing from Cold to Warm Disk")
+			} else if podstate.State.WarmCPU {
+				bonalib.Log("Changing from WarmDisk to WarmCPU")
+				podstate.State.WarmCPU = false
+				podstate.State.WarmDisk = true
+				bonalib.Log("Changing from WarmDisk to WarmCPU")
+			} else if !podstate.State.Cold && !podstate.State.WarmCPU {
+				bonalib.Log("You are in wrong state")
+			}
+			return
+		case <-podstate.StateChan.WarmCPU: // Container exist, ready to receive request
+			bonalib.Log("Warmcpu")
+			if podstate.State.WarmDisk {
+				bonalib.Log("Changing to WarmCPU")
+				podstate.State.WarmDisk = false
+				podstate.State.WarmCPU = true
+				bonalib.Log("Finish changing from WarmDisk to WarmCPU")
+			} else if podstate.State.Active {
+				bonalib.Log("Changing to WarmCPU")
+				podstate.State.Active = false
+				podstate.State.WarmCPU = true
+				bonalib.Log("Finish changing from WarmCPU to WarmCPU")
+			} else if !podstate.State.Active && !podstate.State.WarmDisk {
+				bonalib.Log("You are in wrong state")
+			}
+			return
+		case <-podstate.StateChan.Active: // Receiving request
+			return
+		default: // If kodomo first init (Convert from Null to Cold)
+			// for {
+			// 	bonalib.Log("default")
+			// 	if p.State.Null { // This "if" will loop over [schedule] until ksvc finish initialize
+			// 		bonalib.Log("Changing from Null to Cold")
+			// 		p.initKsvc()
+			// 		// p.image = grepImage(kodomo.Name)
+			// 		// p.imageID = grepImageID(p.Name)
+			// 		// deleteSeika(kodomo.Name)
+			// 		// bonalib.Log("image", kodomo.image)
+			// 		// bonalib.Log("imageid", kodomo.imageID)
+			// 		// crictlRmi(kodomo)
+			// 		p.State.Cold = true
+			// 		bonalib.Log("Finish changing from Null to Cold")
+			// 	}
 
+			// 	time.Sleep(time.Duration(p.sleepTime) * time.Second)
+			// }
+			bonalib.Log("DEFAULT")
+			time.Sleep(time.Duration(podstate.sleepTime) * time.Second)
+		}
+	}
 }
 
-func (k *KodomoScheduler) AddPodState(podstate *PodState) {
-	podstate.Kodomo = k
-	k.PodState[podstate.Name] = podstate
+func (k *KodomoScheduler) AddPodState(podmonitor *PodMonitor) {
+	podmonitor.Kodomo = k
+	k.PodMonitor[podmonitor.Name] = podmonitor
 	// go k.SchedulePodState(k.PodState[podstate.Name])
 }
 
-func (k *KodomoScheduler) deletePodState(podstate *PodState) {
+func (k *KodomoScheduler) deletePodState(podstate *PodMonitor) {
 	return
 }

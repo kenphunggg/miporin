@@ -27,7 +27,7 @@ type StateChan struct {
 	Active     chan bool // Receiving request
 }
 
-type PodState struct {
+type PodMonitor struct {
 	Name      string
 	NodeName  string
 	sleepTime int8
@@ -39,7 +39,7 @@ type PodState struct {
 func NewState() *State {
 	newState := &State{
 		Null:       true,
-		Cold:       true,
+		Cold:       false,
 		WarmDisk:   false,
 		WarmCPU:    false,
 		WarmMemory: false,
@@ -60,84 +60,34 @@ func NewStateChan() *StateChan {
 	return newStateChan
 }
 
-func NewPodState(name string, sleepTime int8) *PodState {
-	newPodState := &PodState{
+func NewPodMonitor(name string, sleepTime int8) *PodMonitor {
+	newPodState := &PodMonitor{
 		Name:      name,
 		sleepTime: sleepTime,
 		State:     NewState(),
 		StateChan: NewStateChan(),
 	}
 
-	go newPodState.PodStateSchedule()
+	// go newPodState.PodStateSchedule()
 
 	return newPodState
 }
 
-func (p *PodState) PodStateSchedule() {
+func (p *PodMonitor) PodMonitorSchedule() {
 	for {
 		select {
-		case <-p.StateChan.WarmDisk: // Service and image available
-			// if !kodomo.State.WarmDisk {
-			if p.State.Cold {
-				bonalib.Log("Changing from Cold to Warm Disk")
-				// PULL IMAGE TO DOCKER
-				// dockerPull(kodomo)
-				p.State.Cold = false
-				p.State.WarmDisk = true
-				bonalib.Log("Finsish changing from Cold to Warm Disk")
-			} else if p.State.WarmCPU {
-				bonalib.Log("Changing from WarmDisk to WarmCPU")
-				p.State.WarmCPU = false
-				p.State.WarmDisk = true
-				bonalib.Log("Changing from WarmDisk to WarmCPU")
-			} else if !p.State.Cold && !p.State.WarmCPU {
-				bonalib.Log("You are in wrong state")
-			}
-			return
-		case <-p.StateChan.WarmCPU: // Container exist, ready to receive request
-			bonalib.Log("Warmcpu")
-			if p.State.WarmDisk {
-				bonalib.Log("Changing to WarmCPU")
-				p.State.WarmDisk = false
-				p.State.WarmCPU = true
-				bonalib.Log("Finish changing from WarmDisk to WarmCPU")
-			} else if p.State.Active {
-				bonalib.Log("Changing to WarmCPU")
-				p.State.Active = false
-				p.State.WarmCPU = true
-				bonalib.Log("Finish changing from WarmCPU to WarmCPU")
-			} else if !p.State.Active && !p.State.WarmDisk {
-				bonalib.Log("You are in wrong state")
-			}
-			return
-		case <-p.StateChan.Active: // Receiving request
-			return
-		default: // If kodomo first init (Convert from Null to Cold)
-			// for {
-			// 	bonalib.Log("default")
-			// 	if p.State.Null { // This "if" will loop over [schedule] until ksvc finish initialize
-			// 		bonalib.Log("Changing from Null to Cold")
-			// 		p.initKsvc()
-			// 		// p.image = grepImage(kodomo.Name)
-			// 		// p.imageID = grepImageID(p.Name)
-			// 		// deleteSeika(kodomo.Name)
-			// 		// bonalib.Log("image", kodomo.image)
-			// 		// bonalib.Log("imageid", kodomo.imageID)
-			// 		// crictlRmi(kodomo)
-			// 		p.State.Cold = true
-			// 		bonalib.Log("Finish changing from Null to Cold")
-			// 	}
-
-			// 	time.Sleep(time.Duration(p.sleepTime) * time.Second)
-			// }
+		case <-p.StateChan.Null:
+		case <-p.StateChan.Cold:
+		case <-p.StateChan.WarmDisk:
+		case <-p.StateChan.WarmCPU:
+		case <-p.StateChan.Active:
+		default:
 			bonalib.Log("DEFAULT")
-			time.Sleep(time.Duration(p.sleepTime) * time.Second)
 		}
 	}
-
 }
 
-func (p *PodState) initKsvc() {
+func (p *PodMonitor) initKsvc() {
 	for { // Loop until finish initilize ksvc
 		pods, err := CLIENTSET.CoreV1().Pods("default").List(context.TODO(), metav1.ListOptions{})
 		if err != nil {
