@@ -14,7 +14,6 @@ import (
 )
 
 func createSeika(ksvcName string) {
-	namespace := "default"
 
 	seikaGVR := schema.GroupVersionResource{
 		Group:    "batch.bonavadeur.io",
@@ -24,6 +23,8 @@ func createSeika(ksvcName string) {
 
 	var deployment *v1.Deployment
 	var err error
+	// -------------<>-------------WARNING-------------<>-------------
+	namespace := "default"
 	for {
 		deployment, err = CLIENTSET.AppsV1().
 			Deployments(namespace).
@@ -36,10 +37,10 @@ func createSeika(ksvcName string) {
 			deployment.Spec.Template.ObjectMeta.CreationTimestamp = metav1.Time{}
 			deployment.ObjectMeta.ResourceVersion = ""
 			deployment.ObjectMeta.UID = ""
-			// time.Sleep(5 * time.Second)
 			break
 		}
 	}
+	// -------------<>-------------WARNING-------------<>-------------
 
 	seikaInstance := &unstructured.Unstructured{
 		Object: map[string]interface{}{
@@ -56,6 +57,76 @@ func createSeika(ksvcName string) {
 					},
 				},
 				"template": deployment.Spec.Template,
+			},
+		},
+	}
+	repurika := seikaInstance.Object["spec"].(map[string]interface{})["repurika"].(map[string]interface{})
+	for _, nodename := range NODENAMES {
+		repurika[nodename] = 0
+	}
+
+	// // create seika instance
+	result, err := DYNCLIENT.Resource(seikaGVR).Namespace("default").Create(context.TODO(), seikaInstance, metav1.CreateOptions{})
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		bonalib.Info("Created Seika instance", result.GetName())
+	}
+}
+
+func createTempSeika(ksvcName string) {
+
+	seikaGVR := schema.GroupVersionResource{
+		Group:    "batch.bonavadeur.io",
+		Version:  "v1",
+		Resource: "seikas",
+	}
+
+	var deployment *v1.Deployment
+	var err error
+	// -------------<>-------------WARNING-------------<>-------------
+	namespace := "default"
+	for {
+		deployment, err = CLIENTSET.AppsV1().
+			Deployments(namespace).
+			Get(context.TODO(), ksvcName+"-00001-deployment", metav1.GetOptions{})
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		} else {
+			// delete some fields
+			deployment.Spec.Template.ObjectMeta.CreationTimestamp = metav1.Time{}
+			deployment.ObjectMeta.ResourceVersion = ""
+			deployment.ObjectMeta.UID = ""
+			break
+		}
+	}
+	// -------------<>-------------WARNING-------------<>-------------
+
+	seikaInstance := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "batch.bonavadeur.io/v1",
+			"kind":       "Seika",
+			"metadata": map[string]interface{}{
+				"name": ksvcName,
+			},
+			"spec": map[string]interface{}{
+				"repurika": map[string]interface{}{},
+				"selector": map[string]interface{}{
+					"matchLabels": map[string]interface{}{
+						"bonavadeur.io/seika": ksvcName,
+					},
+				},
+				"template": map[string]interface{}{
+					"spec": map[string]interface{}{
+						"containers": []map[string]interface{}{
+							{
+								"name":  ksvcName,
+								"image": "docker.io/bonavadeur/shuka:v1.3",
+							},
+						},
+					},
+				},
 			},
 		},
 	}

@@ -79,6 +79,9 @@ func (k *KodomoScheduler) schedule() {
 	for {
 		select {
 		case <-k.ScheduleStop.Kodomo:
+			for name, _ := range k.PodMonitor {
+				k.PodMonitor[name].StateChan.Null <- true
+			}
 			time.Sleep(time.Duration(k.SleepTime) * time.Second)
 			return
 		default:
@@ -95,6 +98,8 @@ func (k *KodomoScheduler) schedule() {
 					podmap[podstate.NodeName]++
 				}
 			}
+
+			// bonalib.Log("Pod monitor map", podmap)
 			k.PodMonitorMap = podmap
 
 			time.Sleep(time.Duration(k.SleepTime) * time.Second)
@@ -282,75 +287,10 @@ func autoscalingTarget(kodomo *KodomoScheduler) (string, error) {
 
 }
 
-func SchedulePodState(podstate *PodMonitor) {
-	for {
-		select {
-		case <-podstate.StateChan.WarmDisk: // Service and image available
-			// if !kodomo.State.WarmDisk {
-			if podstate.State.Cold {
-				bonalib.Log("Changing from Cold to Warm Disk")
-				// PULL IMAGE TO DOCKER
-				// dockerPull(kodomo)
-				podstate.State.Cold = false
-				podstate.State.WarmDisk = true
-				bonalib.Log("Finsish changing from Cold to Warm Disk")
-			} else if podstate.State.WarmCPU {
-				bonalib.Log("Changing from WarmDisk to WarmCPU")
-				podstate.State.WarmCPU = false
-				podstate.State.WarmDisk = true
-				bonalib.Log("Changing from WarmDisk to WarmCPU")
-			} else if !podstate.State.Cold && !podstate.State.WarmCPU {
-				bonalib.Log("You are in wrong state")
-			}
-			return
-		case <-podstate.StateChan.WarmCPU: // Container exist, ready to receive request
-			bonalib.Log("Warmcpu")
-			if podstate.State.WarmDisk {
-				bonalib.Log("Changing to WarmCPU")
-				podstate.State.WarmDisk = false
-				podstate.State.WarmCPU = true
-				bonalib.Log("Finish changing from WarmDisk to WarmCPU")
-			} else if podstate.State.Active {
-				bonalib.Log("Changing to WarmCPU")
-				podstate.State.Active = false
-				podstate.State.WarmCPU = true
-				bonalib.Log("Finish changing from WarmCPU to WarmCPU")
-			} else if !podstate.State.Active && !podstate.State.WarmDisk {
-				bonalib.Log("You are in wrong state")
-			}
-			return
-		case <-podstate.StateChan.Active: // Receiving request
-			return
-		default: // If kodomo first init (Convert from Null to Cold)
-			// for {
-			// 	bonalib.Log("default")
-			// 	if p.State.Null { // This "if" will loop over [schedule] until ksvc finish initialize
-			// 		bonalib.Log("Changing from Null to Cold")
-			// 		p.initKsvc()
-			// 		// p.image = grepImage(kodomo.Name)
-			// 		// p.imageID = grepImageID(p.Name)
-			// 		// deleteSeika(kodomo.Name)
-			// 		// bonalib.Log("image", kodomo.image)
-			// 		// bonalib.Log("imageid", kodomo.imageID)
-			// 		// crictlRmi(kodomo)
-			// 		p.State.Cold = true
-			// 		bonalib.Log("Finish changing from Null to Cold")
-			// 	}
-
-			// 	time.Sleep(time.Duration(p.sleepTime) * time.Second)
-			// }
-			bonalib.Log("DEFAULT")
-			time.Sleep(time.Duration(podstate.sleepTime) * time.Second)
-		}
-	}
-}
-
 func (k *KodomoScheduler) AddPodState(podmonitor *PodMonitor) {
 	podmonitor.Kodomo = k
 	k.PodMonitor[podmonitor.Name] = podmonitor
 	// go k.SchedulePodState(k.PodState[podstate.Name])
 }
 
-func (k *KodomoScheduler) deletePodState(podstate *PodMonitor) {
-	return
-}
+

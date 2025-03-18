@@ -48,7 +48,7 @@ func NewOkasanScheduler(
 	}
 	atarashiiOkasanScheduler.init()
 
-	go atarashiiOkasanScheduler.scrapeKPACus() // Scrape "Knative Pod Autoscaler"
+	// go atarashiiOkasanScheduler.scrapeKPACus() // Scrape "Knative Pod Autoscaler"
 
 	go atarashiiOkasanScheduler.watchKsvcCreateEvent()
 
@@ -294,7 +294,7 @@ func (o *OkasanScheduler) watchKsvcCreateEvent() {
 		if event.Type == watch.Added {
 			bonalib.Warn("Ksvc has been created:", ksvcName)
 			// create apropriate Seika
-			createSeika(ksvcName)
+			createTempSeika(ksvcName)
 			// create apropriate KodomoScheduler
 			child := NewKodomoScheduler(ksvcName, o.sleepTime)
 			o.addKodomo(child)

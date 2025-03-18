@@ -1,13 +1,16 @@
 package yukari
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/bonavadeur/miporin/pkg/bonalib"
 	"golang.org/x/crypto/ssh"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -139,28 +142,58 @@ func grepImage(ksvcName string) string {
 
 // }
 
-// func dockerPull(kodomo *KodomoScheduler) {
-// 	for _, node := range NODENAMES {
-// 		// Define the SSH command and the remote Docker pull command
-// 		remoteCommand := "docker pull " + kodomo.image
-// 		sshCommand := exec.Command("ssh", node, remoteCommand)
+func dockerPull(pod *PodMonitor) {
+	dockerRegistry := "100.82.175.64:5000"
+	reporitory := "/lazyken/"
+	for _, node := range NODENAMES {
+		// Define the SSH command and the remote Docker pull command
+		remoteCommand := "docker pull " + dockerRegistry + reporitory + pod.Kodomo.Name + ":" + pod.Name
+		sshCommand := exec.Command("ssh", node, remoteCommand)
 
-// 		// Capture stdout and stderr for debugging and logging
-// 		var stdout, stderr bytes.Buffer
-// 		sshCommand.Stdout = &stdout
-// 		sshCommand.Stderr = &stderr
+		// Capture stdout and stderr for debugging and logging
+		var stdout, stderr bytes.Buffer
+		sshCommand.Stdout = &stdout
+		sshCommand.Stderr = &stderr
 
-// 		bonalib.Log("Pulling image for node:", node)
+		bonalib.Log("Pulling image for node:", node)
 
-// 		// Execute the SSH command
-// 		err := sshCommand.Run()
-// 		if err != nil {
-// 			bonalib.Warn("Cannot pull image on node:", node)
-// 			fmt.Printf("Error executing SSH command: %v\n", err)
-// 			fmt.Printf("Stderr: %s\n", stderr.String())
-// 		}
+		// Execute the SSH command
+		err := sshCommand.Run()
+		if err != nil {
+			bonalib.Warn("Cannot pull image on node:", node)
+			fmt.Printf("Error executing SSH command: %v\n", err)
+			fmt.Printf("Stderr: %s\n", stderr.String())
+		}
 
-// 		// Print the output of the command
-// 		fmt.Println("Command output:", stdout.String())
-// 	}
-// }
+		// Print the output of the command
+		fmt.Println("Command output:", stdout.String())
+	}
+}
+
+func dockerRmi(pod *PodMonitor) {
+	dockerRegistry := "100.82.175.64:5000"
+	reporitory := "/lazyken/"
+	for _, node := range NODENAMES {
+		// Define the SSH command and the remote Docker pull command
+		remoteCommand := "docker rmi " + dockerRegistry + reporitory + pod.Kodomo.Name + ":" + pod.Name
+		sshCommand := exec.Command("ssh", node, remoteCommand)
+
+		// Capture stdout and stderr for debugging and logging
+		var stdout, stderr bytes.Buffer
+		sshCommand.Stdout = &stdout
+		sshCommand.Stderr = &stderr
+
+		bonalib.Log("Removing image for node:", node)
+
+		// Execute the SSH command
+		err := sshCommand.Run()
+		if err != nil {
+			bonalib.Warn("Cannot remove image on node:", node)
+			fmt.Printf("Error executing SSH command: %v\n", err)
+			fmt.Printf("Stderr: %s\n", stderr.String())
+		}
+
+		// Print the output of the command
+		fmt.Println("Command output:", stdout.String())
+	}
+}
