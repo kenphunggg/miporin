@@ -23,7 +23,6 @@ func createSeika(ksvcName string) {
 
 	var deployment *v1.Deployment
 	var err error
-	// -------------<>-------------WARNING-------------<>-------------
 	namespace := "default"
 	for {
 		deployment, err = CLIENTSET.AppsV1().
@@ -40,7 +39,6 @@ func createSeika(ksvcName string) {
 			break
 		}
 	}
-	// -------------<>-------------WARNING-------------<>-------------
 
 	seikaInstance := &unstructured.Unstructured{
 		Object: map[string]interface{}{

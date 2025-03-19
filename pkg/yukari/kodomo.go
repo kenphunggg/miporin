@@ -24,6 +24,7 @@ type KodomoScheduler struct {
 	AuTarget      int
 	PodMonitor    map[string]*PodMonitor
 	PodMonitorMap map[string]int32
+	ksvcReady     bool
 }
 
 type StopChan struct {
@@ -40,6 +41,7 @@ func NewKodomoScheduler(
 		Decision:     map[string]int32{},
 		ScheduleStop: NewStopChan(),
 		PodMonitor:   map[string]*PodMonitor{},
+		ksvcReady:    false,
 	}
 
 	// Initialize value for decision on node to 0
@@ -245,6 +247,12 @@ func (k *KodomoScheduler) scrapePodAutoScaling() {
 
 }
 
+// func (k *KodomoScheduler) setUpKsvc() {
+// 	for _, node := range NODENAMES {
+
+// 	}
+// }
+
 func autoscalingTarget(kodomo *KodomoScheduler) (string, error) {
 	select {
 	case <-kodomo.ScheduleStop.Okasan:
@@ -286,11 +294,3 @@ func autoscalingTarget(kodomo *KodomoScheduler) (string, error) {
 	}
 
 }
-
-func (k *KodomoScheduler) AddPodState(podmonitor *PodMonitor) {
-	podmonitor.Kodomo = k
-	k.PodMonitor[podmonitor.Name] = podmonitor
-	// go k.SchedulePodState(k.PodState[podstate.Name])
-}
-
-

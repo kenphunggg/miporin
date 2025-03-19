@@ -187,6 +187,8 @@ func (o *OkasanScheduler) schedule(kodomo *KodomoScheduler) {
 				continue
 			}
 
+			bonalib.Log("deltADesiredPods in ksvc", kodomo.Name, ":", deltaDesiredPods)
+
 			// State algorithm
 			// if !containSeika(kodomo.Name) && !kodomo.KodomoState.Cold {
 			// 	// bonalib.Log("seika", kodomo.Name, " CONFIRMED deleted")
@@ -294,7 +296,7 @@ func (o *OkasanScheduler) watchKsvcCreateEvent() {
 		if event.Type == watch.Added {
 			bonalib.Warn("Ksvc has been created:", ksvcName)
 			// create apropriate Seika
-			createTempSeika(ksvcName)
+			createSeika(ksvcName)
 			// create apropriate KodomoScheduler
 			child := NewKodomoScheduler(ksvcName, o.sleepTime)
 			o.addKodomo(child)

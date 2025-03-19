@@ -117,31 +117,6 @@ func grepImage(ksvcName string) string {
 	return image
 }
 
-// func crictlRmi(kodmo *KodomoScheduler) {
-// 	for _, node := range NODENAMES {
-// 		// Define the remote command
-// 		remoteCommand := "crictl rmi " + kodmo.imageID
-
-// 		// Use the `ssh` command with the hostname from your SSH config file
-// 		sshCommand := exec.Command("ssh", node, remoteCommand)
-
-// 		// Capture stdout and stderr
-// 		var stdout, stderr bytes.Buffer
-// 		sshCommand.Stdout = &stdout
-// 		sshCommand.Stderr = &stderr
-
-// 		// Run the command
-// 		if err := sshCommand.Run(); err != nil {
-// 			fmt.Printf("Error executing SSH command: %v\n", err)
-// 			fmt.Printf("Stderr: %s\n", stderr.String())
-// 		}
-
-// 		// Print the output
-// 		fmt.Println("Command output:", stdout.String())
-// 	}
-
-// }
-
 func dockerPull(pod *PodMonitor) {
 	dockerRegistry := "100.82.175.64:5000"
 	reporitory := "/lazyken/"
